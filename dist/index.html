@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1519">
+  <meta name="description" content="Follow a missing astronomer into five connected chambers. A pixel-art puzzle adventure where your mouse leads the way.">
+  <title>The Buried Observatory — A descent into the unknown</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230b1519'/%3E%3Cpath d='M32 8l5 19 19 5-19 5-5 19-5-19-19-5 19-5z' fill='%23d3b47c'/%3E%3C/svg%3E">
+  <link rel="preload" as="image" href="./assets/dome.webp">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <svg class="icon-defs" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 2l2.6 7.4L22 12l-7.4 2.6L12 22l-2.6-7.4L2 12l7.4-2.6z"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M12 5v15M3 4c4-1 7-1 9 1 2-2 5-2 9-1v15c-4-1-7-1-9 1-2-2-5-2-9-1z"/></symbol>
+    <symbol id="i-sound" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9zM17 8c3 2 3 6 0 8M20 5c5 4 5 10 0 14"/></symbol>
+    <symbol id="i-mute" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9zM17 9l5 6m0-6l-5 6"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-mouse" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="6"/><path d="M12 2v7M6 10h12"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 3v17m-6-6l6 6 6-6"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="8" r="5"/><path d="M12 12l9 9m-3-3l3-3m-6 0l3-3"/></symbol>
+    <symbol id="i-prism" viewBox="0 0 24 24"><path d="M12 2L2 20h20zM12 2v13L2 20m10-5l10 5"/></symbol>
+    <symbol id="i-fullscreen" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></symbol>
+  </defs></svg>
+
+  <section id="startScreen" class="start-screen" aria-labelledby="gameTitle">
+    <div class="start-art"></div><div class="start-shade"></div><div class="starfield" aria-hidden="true"></div>
+    <header class="start-top"><span class="wordmark"><svg class="icon"><use href="#i-star"/></svg> SMALL WORLDS / NO. 01</span><span class="edition">AN INDEPENDENT BROWSER ADVENTURE</span></header>
+    <div class="start-content">
+      <p class="eyebrow"><span></span> SOME SECRETS ARE BURIED FOR A REASON</p>
+      <h1 id="gameTitle">The Buried<br><em>Observatory</em><span class="title-star" aria-hidden="true">✧</span></h1>
+      <p class="start-copy">Your mentor followed the stars underground.<br>Take a lantern. Follow the clues. Bring him home.</p>
+      <div class="start-actions"><button id="beginButton" class="primary">Begin the descent <span>↓</span></button><button id="continueButton" class="secondary" hidden>Continue your journey <span>↗</span></button></div>
+      <p class="start-meta">FIVE CONNECTED CHAMBERS <span>·</span> ONE HIDDEN STORY</p>
+    </div>
+    <footer class="start-footer"><span><svg class="icon"><use href="#i-mouse"/></svg> Your mouse is your explorer.</span><span>LOOK CLOSER. GO DEEPER.</span><span class="headphone-note">Best explored with a mouse & headphones</span></footer>
+  </section>
+
+  <div id="app" class="app" hidden>
+    <header class="app-header">
+      <a href="#" id="titleLink" class="game-wordmark" aria-label="Open game menu"><svg class="icon"><use href="#i-star"/></svg><span>THE BURIED<br><strong>OBSERVATORY</strong></span></a>
+      <span class="header-caption">A LITTLE LIGHT IN THE DARK</span>
+      <nav class="header-actions" aria-label="Game tools">
+        <button id="expeditionButton" class="tool-button" aria-label="View expedition and inventory"><svg class="icon"><use href="#i-down"/></svg><span>Expedition</span></button>
+        <button id="journalButton" class="tool-button"><svg class="icon"><use href="#i-book"/></svg><span>Field journal</span><small id="journalCount">01</small></button>
+        <button id="hintButton" class="icon-button" aria-label="Ask for a hint"><span class="tiny-star">✧</span></button>
+        <button id="soundButton" class="icon-button" aria-label="Unmute ambient sound" aria-pressed="false"><svg class="icon"><use href="#i-mute"/></svg></button>
+        <button id="fullscreenButton" class="icon-button" aria-label="Enter fullscreen" aria-pressed="false"><svg class="icon"><use href="#i-fullscreen"/></svg></button>
+        <button id="menuButton" class="icon-button" aria-label="Open game menu"><svg class="icon"><use href="#i-menu"/></svg></button>
+      </nav>
+    </header>
+    <main class="game-layout">
+      <section class="play-column" aria-labelledby="roomName">
+        <div class="room-heading"><div><p class="eyebrow" id="roomNumber">CHAMBER I / V</p><h1 id="roomName">Broken Dome</h1><p id="hudObjective" class="hud-objective"></p></div><div class="room-depth"><span id="depthValue">00</span><small>METRES BELOW</small></div></div>
+        <div id="stage" class="stage">
+          <canvas id="game" width="960" height="640" tabindex="0" aria-label="Dungeon exploration area. Move your mouse to guide the explorer; click nearby objects. Scroll continuously down to descend and up to revisit unlocked chambers."></canvas>
+          <div class="stage-corner corner-tl"></div><div class="stage-corner corner-tr"></div><div class="stage-corner corner-bl"></div><div class="stage-corner corner-br"></div>
+          <div class="stage-label"><span class="live-dot"></span><span id="roomSubtitle">Where the sky fell in</span></div>
+          <div id="hoverLabel" class="hover-label" hidden></div>
+          <div id="travelPrompt" class="travel-prompt" hidden></div>
+          <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+        </div>
+        <div class="controls-strip"><span><svg class="icon"><use href="#i-mouse"/></svg><b>MOVE</b> to explore <span class="control-divider">/</span> <b>CLICK</b> to investigate</span><span><b>SCROLL</b> down ↓ <span class="control-divider">/</span> up ↑</span></div>
+      </section>
+      <aside class="sidebar">
+        <div class="sidebar-top"><span class="eyebrow">YOUR EXPEDITION</span><span class="tiny-star">✧</span></div>
+        <section class="objective"><p class="section-label">A THREAD TO FOLLOW</p><h2 id="objectiveText">Find a way through the first celestial seal.</h2><p>Nothing here is quite as it first appears.</p></section>
+        <section class="descent"><div class="section-label">THE DESCENT <span id="roomProgress">01 / 05</span></div><ol id="roomList" class="room-list"></ol></section>
+        <section class="inventory"><p class="section-label">IN YOUR SATCHEL</p><div id="inventoryItems" class="inventory-items"><span class="empty-inventory">A lantern. A little courage.</span></div></section>
+      </aside>
+    </main>
+    <footer class="app-footer"><span id="saveStatus"><span class="live-dot"></span> PROGRESS SAVED LOCALLY</span><span>THE ANSWER MAY BE UPSTAIRS.</span><span>TAKE YOUR TIME.</span></footer>
+    <div class="depth-rail" aria-label="Dungeon depth"><span>00</span><div class="depth-track"><i id="scrollMarker"></i></div><span>61m</span></div>
+  </div>
+  <dialog id="dialog" aria-labelledby="dialogTitle"><div id="dialogContent"></div></dialog>
+  <script type="module" src="./game.mjs"></script>
+</body>
+</html>

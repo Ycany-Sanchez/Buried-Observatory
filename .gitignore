@@ -1,0 +1,7 @@
+node_modules/
+.browser-profile*/
+qa/
+.delivery/
+*.tar.gz
+*.zip
+dist/assets/*.png
