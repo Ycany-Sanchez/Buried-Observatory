@@ -2,7 +2,7 @@
 
 Keep the five-room mystery, mouse-follow exploration, and continuous vertical descent. Improve the existing journey in this order.
 
-## 1. Make scrolling part of a puzzle — in progress
+## 1. Make scrolling part of a puzzle — complete
 
 After returning the prism to the Broken Dome, aim its light through a mirror into the Archive receiver. Players must scroll between floors so both parts are visible together. The hidden writing appears only after the beam is aligned.
 
@@ -13,6 +13,18 @@ After returning the prism to the Broken Dome, aim its light through a mirror int
 - Add objectives, progressive hints, journal context, and saved completion.
 - Preserve existing saves: journeys that already revealed the projection keep their progress.
 - Verify incorrect aim, off-screen attempts, the full solution, save recovery, and the standalone `play.html` edition.
+
+Implemented in the modular game and regenerated `play.html`. The mirror is beside the Dome's southern stairs; its beam crosses the floor boundary to the Archive wall. Mouse dragging, keyboard aiming, touch scrolling, and view/aim buttons are supported. The framing check also prevents locking a receiver hidden behind the control panel on a short screen.
+
+Validation completed:
+
+- `npm test`: all 13 tests pass, including the complete connected solution and legacy-save migration.
+- `node tools/browser-qa.mjs --full`: complete playthrough, wrong aim, cross-floor scrolling, keyboard/touch/drag controls, beacon ending, completed-save reload, and responsive layouts pass without browser exceptions.
+- `node tools/browser-qa.mjs --light-only --portable`: standalone mirror interaction and saved-alignment reload pass.
+- Desktop, narrow phone, and 390×568 short-phone layouts checked.
+- Standards and specification review complete; shared handle geometry consolidated so drawing and dragging use the same position.
+
+Items 2–8 remain planned for later work.
 
 ## 2. Give each room a distinct shape — planned
 

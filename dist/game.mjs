@@ -2,7 +2,7 @@ import { SAVE_KEY, SYMBOLS, NOTES, freshState, restoreState, lastUnlocked, apply
 import { W, H, ROOMS, isWalkable, safePosition, nearbyObject } from './rooms.mjs';
 import { makeScene, drawFrame, drawLightPath } from './art.mjs';
 import { viewport, clampScroll, roomAtScroll, screenToWorld, worldToScreen, wheelDistance } from './camera.mjs';
-import { LIGHT_PATH, clampLightAim, lightEndpoint, lightInView, lightAligned } from './light.mjs';
+import { LIGHT_PATH, clampLightAim, lightHandle, lightInView, lightAligned } from './light.mjs';
 
 const $ = id => document.getElementById(id);
 const canvas = $('game'), ctx = canvas.getContext('2d');
@@ -239,9 +239,7 @@ canvas.addEventListener('pointerdown',e=>{
   if(!running||dialog.open||busy)return;
   canvas.focus({preventScroll:true});
   if(adjustingLight){
-    const p=point(e),world={x:p.x,y:p.room*H+p.y},end=lightEndpoint(lightAim);
-    const length=Math.hypot(end.x-LIGHT_PATH.source.x,end.y-LIGHT_PATH.source.y);
-    const handle={x:LIGHT_PATH.source.x+(end.x-LIGHT_PATH.source.x)/length*23,y:LIGHT_PATH.source.y+(end.y-LIGHT_PATH.source.y)/length*23};
+    const p=point(e),world={x:p.x,y:p.room*H+p.y},handle=lightHandle(lightAim);
     if(Math.hypot(world.x-handle.x,world.y-handle.y)<=18||Math.hypot(world.x-LIGHT_PATH.source.x,world.y-LIGHT_PATH.source.y)<=18)lightDrag={kind:'mirror'};
     else if(e.pointerType==='touch')lightDrag={kind:'scroll',y:e.clientY};
     if(lightDrag){canvas.setPointerCapture(e.pointerId);e.preventDefault();}

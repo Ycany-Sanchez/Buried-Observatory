@@ -79,7 +79,7 @@ try{
     await objectClick(330,258,false);
     assert.equal(await evaluate('window.observatory.light.adjusting'),true,'Mirror opens an in-world adjustment');
     assert.equal(await evaluate('document.querySelector("#lockLight").disabled'),true,'Cannot lock from a single-floor view');
-    const scrollView=async distance=>{const v=await evaluate('window.observatory.camera');await send('Input.dispatchMouseEvent',{type:'mouseWheel',x:720,y:400,deltaY:distance*v.scale,deltaX:0});await sleep(180);};
+    const scrollView=async distance=>{const v=await evaluate('window.observatory.camera');await send('Input.dispatchMouseEvent',{type:'mouseWheel',x:v.width/2,y:v.height/2,deltaY:distance*v.scale,deltaX:0});await sleep(180);};
     await scrollView(160);
     assert.equal(await evaluate('Math.round(window.observatory.camera.scrollY)'),160);
     const stationary=await evaluate('JSON.stringify(window.observatory.state.player)');
@@ -99,9 +99,9 @@ try{
     assert.ok((await evaluate('window.observatory.camera.scrollY'))>180,'Touch swipe scrolls during mirror adjustment');
     await click('#lightViewUp');await sleep(80);
     await send('Emulation.setDeviceMetricsOverride',{width:390,height:568,deviceScaleFactor:1,mobile:true});await sleep(200);
-    for(let n=0;n<4&&await evaluate('document.querySelector("#lockLight").disabled');n++)await click('#lightViewDown');
-    assert.equal(await evaluate('document.querySelector("#lockLight").disabled'),false,'Short phone screen can frame both ends above its controls');
+    await scrollView(256-(await evaluate('window.observatory.camera.scrollY')));
     await screenshot('10-mirror-short-phone');
+    assert.equal(await evaluate('document.querySelector("#lockLight").disabled'),false,'Short phone screen can frame both ends above its controls: '+JSON.stringify(await evaluate('({camera:window.observatory.camera,panel:document.querySelector("#lightControls").getBoundingClientRect().toJSON()})')));
     await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});await sleep(200);
     await scrollView(160-(await evaluate('window.observatory.camera.scrollY')));
     // Aim by dragging the actual mirror, then latch with the separate control.

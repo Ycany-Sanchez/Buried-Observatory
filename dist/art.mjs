@@ -1,6 +1,6 @@
 import { W, H, ROOMS } from './rooms.mjs';
 import { lastUnlocked } from './state.mjs';
-import { LIGHT_PATH, lightEndpoint } from './light.mjs';
+import { LIGHT_PATH, lightEndpoint, lightHandle } from './light.mjs';
 const palette = { gold: '#bda374', light: '#e2c58a', stone: '#324346', dark: '#0c1a20', teal: '#568881' };
 const hash = (x, y) => { const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return n - Math.floor(n); };
 function rect(c,x,y,w,h,color){c.fillStyle=color;c.fillRect(Math.round(x),Math.round(y),w,h);}
@@ -132,7 +132,7 @@ export function drawLightPath(c, view, scroll, state, aim, adjusting) {
   c.strokeStyle=state.flags.beamAligned?'#e5efb5':'#adb7aa';c.lineWidth=1.5;
   c.beginPath();c.arc(r.x,r.y,10*view.scale,0,Math.PI*2);c.stroke();
   if(adjusting){
-    const length=Math.hypot(end.x-source.x,end.y-source.y),handle=screen({x:source.x+(end.x-source.x)/length*23,y:source.y+(end.y-source.y)/length*23});
+    const handle=screen(lightHandle(aim));
     c.fillStyle='#172d31';c.strokeStyle=color;c.lineWidth=2;
     c.beginPath();c.arc(handle.x,handle.y,Math.max(8,4*view.scale),0,Math.PI*2);c.fill();c.stroke();
     c.fillStyle='#f4e3bd';c.font='10px monospace';c.textAlign='right';

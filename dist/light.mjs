@@ -13,6 +13,10 @@ export function clampLightAim(aim) {
 export function lightEndpoint(aim) {
   return { x: LIGHT_PATH.source.x + clampLightAim(aim) * (LIGHT_PATH.receiver.y - LIGHT_PATH.source.y), y: LIGHT_PATH.receiver.y };
 }
+export function lightHandle(aim) {
+  const source=LIGHT_PATH.source,end=lightEndpoint(aim),length=Math.hypot(end.x-source.x,end.y-source.y);
+  return {x:source.x+(end.x-source.x)/length*23,y:source.y+(end.y-source.y)/length*23};
+}
 export function lightInView(scroll, view) {
   if (!view || ![scroll, view.scale, view.x, view.y, view.width, view.height].every(Number.isFinite) || view.scale <= 0) return false;
   // A deliberate between-floor view is part of the mechanism, even on tall displays.

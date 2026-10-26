@@ -39,6 +39,9 @@ Progress autosaves to versioned browser-local storage. Starting a new journey re
 - `dist/game.mjs`: input, UI, animation, audio, and persistence.
 - `tests/state.test.mjs`: full solution, reversible water state, invalid inputs, and save recovery.
 - `tests/camera.test.mjs`: scroll boundaries, trackpad/wheel units, and screen-to-world mapping.
+- `tests/light.test.mjs`: cross-floor framing, incorrect aim, progression gating, and old-save migration.
+
+With local Chrome installed, `node tools/browser-qa.mjs --full` checks the complete journey. Use `--light-only` for the mirror interaction, or `--light-only --portable` to check it in the self-contained edition. The browser checks use an isolated QA profile.
 
 ## Art
 

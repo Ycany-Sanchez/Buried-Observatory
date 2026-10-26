@@ -183,6 +183,10 @@ function clampLightAim(aim) {
 function lightEndpoint(aim) {
   return { x: LIGHT_PATH.source.x + clampLightAim(aim) * (LIGHT_PATH.receiver.y - LIGHT_PATH.source.y), y: LIGHT_PATH.receiver.y };
 }
+function lightHandle(aim) {
+  const source=LIGHT_PATH.source,end=lightEndpoint(aim),length=Math.hypot(end.x-source.x,end.y-source.y);
+  return {x:source.x+(end.x-source.x)/length*23,y:source.y+(end.y-source.y)/length*23};
+}
 function lightInView(scroll, view) {
   if (!view || ![scroll, view.scale, view.x, view.y, view.width, view.height].every(Number.isFinite) || view.scale <= 0) return false;
   // A deliberate between-floor view is part of the mechanism, even on tall displays.
@@ -526,7 +530,7 @@ function drawLightPath(c, view, scroll, state, aim, adjusting) {
   c.strokeStyle=state.flags.beamAligned?'#e5efb5':'#adb7aa';c.lineWidth=1.5;
   c.beginPath();c.arc(r.x,r.y,10*view.scale,0,Math.PI*2);c.stroke();
   if(adjusting){
-    const length=Math.hypot(end.x-source.x,end.y-source.y),handle=screen({x:source.x+(end.x-source.x)/length*23,y:source.y+(end.y-source.y)/length*23});
+    const handle=screen(lightHandle(aim));
     c.fillStyle='#172d31';c.strokeStyle=color;c.lineWidth=2;
     c.beginPath();c.arc(handle.x,handle.y,Math.max(8,4*view.scale),0,Math.PI*2);c.fill();c.stroke();
     c.fillStyle='#f4e3bd';c.font='10px monospace';c.textAlign='right';
@@ -772,9 +776,7 @@ canvas.addEventListener('pointerdown',e=>{
   if(!running||dialog.open||busy)return;
   canvas.focus({preventScroll:true});
   if(adjustingLight){
-    const p=point(e),world={x:p.x,y:p.room*H+p.y},end=lightEndpoint(lightAim);
-    const length=Math.hypot(end.x-LIGHT_PATH.source.x,end.y-LIGHT_PATH.source.y);
-    const handle={x:LIGHT_PATH.source.x+(end.x-LIGHT_PATH.source.x)/length*23,y:LIGHT_PATH.source.y+(end.y-LIGHT_PATH.source.y)/length*23};
+    const p=point(e),world={x:p.x,y:p.room*H+p.y},handle=lightHandle(lightAim);
     if(Math.hypot(world.x-handle.x,world.y-handle.y)<=18||Math.hypot(world.x-LIGHT_PATH.source.x,world.y-LIGHT_PATH.source.y)<=18)lightDrag={kind:'mirror'};
     else if(e.pointerType==='touch')lightDrag={kind:'scroll',y:e.clientY};
     if(lightDrag){canvas.setPointerCapture(e.pointerId);e.preventDefault();}
