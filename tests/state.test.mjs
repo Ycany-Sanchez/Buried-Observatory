@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { freshState, restoreState, applyAction, canTravel, travel, lastUnlocked, hint } from '../dist/state.mjs';
 import { isWalkable, safePosition, ROOMS } from '../dist/rooms.mjs';
+import { viewport } from '../dist/camera.mjs';
 const act=(s,type,extra={})=>{const r=applyAction(s,{type,...extra});assert.equal(r.ok,true,r.message);return r.state;};
 test('the complete mystery requires a connected return journey',()=>{
   let s=freshState();assert.equal(canTravel(s,1),false);
@@ -11,6 +12,7 @@ test('the complete mystery requires a connected return journey',()=>{
   assert.equal(applyAction(s,{type:'solve_pump',code:['crescent','star','sun']}).ok,false);
   s=act(s,'solve_pump',{code:['sun','star','crescent']});s=travel(s,1);s=act(s,'collect_prism');
   assert.equal(canTravel(s,1),false);s=travel(travel(travel(s,-1),-1),-1);s=act(s,'restore_projector');
+  s=act(s,'align_beam',{aim:.25,scroll:160,view:viewport(1440,1000)});
   s=travel(s,1);s=act(s,'inspect_wall');assert.ok(s.journal.includes('projection'));
   s=travel(s,1);s=act(s,'route_generator');s=travel(s,1);s=act(s,'solve_shutters',{code:['2','4','1','3']});
   assert.equal(lastUnlocked(s),4);s=travel(s,1);s=act(s,'meet_mentor');s=act(s,'finish');assert.equal(s.flags.finished,true);
@@ -22,7 +24,7 @@ test('wrong answers and remote interactions cannot mutate progression',()=>{
   assert.equal(canTravel(s,4),false);assert.deepEqual(travel(s,-1),s);
 });
 test('drain latches and the final seal follows reversible generator power',()=>{
-  let s=freshState();Object.assign(s.flags,{archive:true,key:true,pump:true,drained:true,prism:true,projector:true,shutters:true});s.room=2;
+  let s=freshState();Object.assign(s.flags,{archive:true,key:true,pump:true,drained:true,prism:true,projector:true,beamAligned:true,shutters:true});s.room=2;
   s=act(s,'route_generator');assert.equal(lastUnlocked(s),4);s=act(s,'route_generator');assert.equal(lastUnlocked(s),3);assert.equal(s.flags.drained,true);
   s=act(s,'route_generator');assert.equal(lastUnlocked(s),4);
 });

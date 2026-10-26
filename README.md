@@ -25,6 +25,7 @@ To regenerate the self-contained edition after editing, run `node tools/build-po
 - Arrow keys or WASD: supplementary movement. Enter/E: nearby interaction.
 - Page Down/Up: move the view one chamber. J: journal. H: hints. F: toggle fullscreen. Escape: close dialog/menu.
 - Expedition button: review current objective, unlocked rooms, and inventory.
+- Shaft mirror: after installing the prism, investigate the mirror beside the Dome's southern stairs. Scroll partway down to frame the mirror and Archive receiver together. Drag the handle or use Left/Right to aim, then Enter to lock. Up/Down and the view buttons adjust the scroll; Escape leaves adjustment. Touch players can swipe the canvas while adjusting.
 
 Progress autosaves to versioned browser-local storage. Starting a new journey requires confirmation. Audio starts muted; enable it with the sound button.
 
@@ -33,6 +34,7 @@ Progress autosaves to versioned browser-local storage. Starting a new journey re
 - `dist/state.mjs`: pure puzzle transitions, save restoration, objectives, and contextual hints.
 - `dist/rooms.mjs`: geometry, collision, stairways, and interactive object definitions.
 - `dist/camera.mjs`: continuous scrolling, viewport fitting, and coordinate conversion.
+- `dist/light.mjs`: cross-floor light geometry, framing, and alignment checks.
 - `dist/art.mjs`: crisp pixel rendering, room decoration, effects, and asset composition.
 - `dist/game.mjs`: input, UI, animation, audio, and persistence.
 - `tests/state.test.mjs`: full solution, reversible water state, invalid inputs, and save recovery.
@@ -47,7 +49,7 @@ Room illustrations and explorer art generated with the imagegen skill. Gameplay 
 1. Read the Dome mural; set the first seal to crescent, star, sun.
 2. Read the Archive memorandum and Elian’s note, collect the maintenance key, open the southern lock.
 3. Set the Pump Room regulator to sun, star, crescent; read the sluice plaque.
-4. Collect the Lens Chamber prism; return to the Dome and install it in the projector.
+4. Collect the Lens Chamber prism; return to the Dome and install it in the projector. Use the shaft mirror beside the southern stairs; scroll halfway toward the Archive, aim at the silver receiver below, and lock the beam.
 5. Read the now-lit Archive wall. Route water to the generator in the Pump Room.
 6. In the Lens Chamber open shutters 2, 4, 1, 3 and align them.
 7. Descend, speak with Elian, and light the beacon.

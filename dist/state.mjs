@@ -1,3 +1,4 @@
+import { lightAligned } from './light.mjs';
 export const SAVE_KEY = 'buried-observatory:v1';
 export const SYMBOLS = ['crescent', 'star', 'sun'];
 export const ROOM_NAMES = ['Broken Dome', 'The Archive', 'Pump Room', 'Lens Chamber', 'Buried Beacon'];
@@ -7,15 +8,16 @@ export const NOTES = {
   reflection: { title: 'Maintenance memorandum', room: 'The Archive', text: 'To the keeper of the lower instruments: the sky is read from beneath. Reverse the celestial procession when setting the water regulator. The Archive door uses the original order.' },
   mentor: { title: 'A page in Elian’s hand', room: 'The Archive', text: 'The “telescope” is a transmitter. Its light travels down, not up. I took shelter beyond the shutters when the water rose. If you restore the beacon, someone on the surface will see us. The projection prism is still in the Lens Chamber. — E.' },
   plaque: { title: 'The latched sluice', room: 'Pump Room', text: 'DRAIN first. Once the lower chamber is empty, the sluice latches permanently. Water may then be routed to the GENERATOR without flooding the chamber again. Keep the beacon turbine supplied.' },
-  prism: { title: 'A light without a source', room: 'Lens Chamber', text: 'A triangular prism rests inside the lens housing. Its brass foot matches the empty socket of the projector in the Broken Dome. Four numbered shutters surround the southern seal.' },
+  prism: { title: 'A light without a source', room: 'Lens Chamber', text: 'A triangular prism rests inside the lens housing. Its brass foot matches the empty socket of the projector in the Broken Dome. A brass mirror beside the Dome’s southern stairs directs its beam into the Archive. Four numbered shutters surround the southern seal.' },
+  light: { title: 'One instrument, two floors', room: 'Between the Dome and Archive', text: 'The Dome’s shaft mirror and the silver receiver in the Archive belong to one instrument. View both floors together, then turn the mirror until the beam meets the receiver. The brass catch holds the alignment once it is set.' },
   projection: { title: 'Writing in the light', room: 'The Archive', text: 'The restored beam exposes silver lettering on the blank wall: “For the keeper below: open the shutters 2 → 4 → 1 → 3.” A drawing connects the light, the waterwheel, and the final seal.' },
   reunion: { title: 'What the observatory was for', room: 'Buried Beacon', text: 'Elian is alive. The buried lens was built to send a signal through the mountain: a way home for anyone lost in the dark. The stars on its walls were instructions, not observations.' }
 };
 export function freshState() {
-  return { version: 1, room: 0, player: { x: 240, y: 86 }, flags: { archive: false, key: false, pump: false, drained: false, prism: false, projector: false, generator: false, shutters: false, finished: false }, journal: ['letter'], hints: {}, muted: true };
+  return { version: 1, room: 0, player: { x: 240, y: 86 }, flags: { archive: false, key: false, pump: false, drained: false, prism: false, projector: false, beamAligned: false, generator: false, shutters: false, finished: false }, journal: ['letter'], hints: {}, muted: true };
 }
 export function lastUnlocked(s) {
-  if (s.flags.projector && s.flags.generator && s.flags.shutters) return 4;
+  if (s.flags.projector && s.flags.beamAligned && s.flags.generator && s.flags.shutters) return 4;
   if (s.flags.drained) return 3;
   if (s.flags.pump) return 2;
   return s.flags.archive ? 1 : 0;
@@ -31,6 +33,9 @@ export function restoreState(raw) {
     if (!s.flags.pump) s.flags.drained = false;
     if (!s.flags.drained) s.flags.prism = s.flags.generator = s.flags.shutters = false;
     if (!s.flags.prism) s.flags.projector = false;
+    // Older saves already past the projection keep their solved light path.
+    if (!Object.hasOwn(data.flags, 'beamAligned') && s.flags.projector && (data.journal.includes('projection') || s.flags.shutters || s.flags.finished)) s.flags.beamAligned = true;
+    if (!s.flags.projector) s.flags.beamAligned = false;
     if (lastUnlocked(s) < 4) s.flags.finished = false;
     s.room = Math.max(0, Math.min(lastUnlocked(s), Number.isInteger(data.room) ? data.room : 0));
     if (data.player && Number.isFinite(data.player.x) && Number.isFinite(data.player.y)) {
@@ -54,6 +59,12 @@ export function applyAction(original, action) {
   const s = structuredClone(original);
   const finish = (ok, message) => ({ state: s, ok, message });
   const note = id => { if (!s.journal.includes(id)) s.journal.push(id); };
+  if (action.type === 'align_beam') {
+    if (!s.flags.projector || (s.room !== 0 && s.room !== 1)) return finish(false, 'The prism must be installed in the Dome before you can aim its light.');
+    if (!lightAligned(action.aim, action.scroll, action.view)) return finish(false, 'Keep the upstairs mirror and downstairs receiver in view, and aim the beam into the receiver.');
+    s.flags.beamAligned = true; note('light');
+    return finish(true, 'The brass catch clicks. Light fills the Archive receiver, revealing silver writing on the wall below.');
+  }
   const rooms = { inspect_mural: 0, solve_entry: 0, restore_projector: 0, take_key: 1, inspect_reflection: 1, inspect_mentor: 1, inspect_wall: 1, unlock_pump: 1, inspect_plaque: 2, solve_pump: 2, route_generator: 2, collect_prism: 3, solve_shutters: 3, meet_mentor: 4, finish: 4 };
   if (!(action.type in rooms) || s.room !== rooms[action.type]) return finish(false, 'You need to be beside the mechanism to use it.');
   switch (action.type) {
@@ -63,6 +74,7 @@ export function applyAction(original, action) {
     case 'inspect_plaque': note('plaque'); return finish(true, NOTES.plaque.text);
     case 'inspect_wall':
       if (!s.flags.projector) return finish(false, 'A blank plaster wall. Silver flecks glimmer beneath a dark light shaft. Something is missing above.');
+      if (!s.flags.beamAligned) return finish(false, 'The silver receiver is dark. Light spills from above, but the Dome’s shaft mirror is pointing past it.');
       note('projection'); return finish(true, NOTES.projection.text);
     case 'solve_entry':
       if (action.code?.join(',') !== 'crescent,star,sun') return finish(false, 'The brass teeth turn, then settle back. The procession is not right.');
@@ -80,10 +92,10 @@ export function applyAction(original, action) {
     case 'collect_prism': s.flags.prism = true; note('prism'); return finish(true, 'The projection prism is yours. Its brass foot looks familiar.');
     case 'restore_projector':
       if (!s.flags.prism) return finish(false, 'An empty triangular socket. The projector is missing its prism.');
-      s.flags.projector = true; return finish(true, 'The prism catches the moonlight. A narrow beam disappears down the Archive light shaft.');
+      s.flags.projector = true; note('light'); return finish(true, 'The prism catches the moonlight. Adjust the shaft mirror beside the southern stairs, then scroll until you can see its receiver in the Archive below.');
     case 'solve_shutters':
       if (action.code?.join(',') !== '2,4,1,3') return finish(false, 'The shutters close again. Their opening order must be written somewhere.');
-      s.flags.shutters = true; return finish(true, s.flags.projector && s.flags.generator ? 'The shutters align. Light and power meet at the seal. The final stairs open.' : 'The shutters align, but the seal still needs both the restored light and turbine power.');
+      s.flags.shutters = true; return finish(true, s.flags.beamAligned && s.flags.generator ? 'The shutters align. Light and power meet at the seal. The final stairs open.' : 'The shutters align, but the seal still needs both the aligned light and turbine power.');
     case 'meet_mentor': note('reunion'); return finish(true, '“You found me.” Elian smiles in the lantern light. “They built this to bring people home. Will you help me send the signal?”');
     case 'finish':
       if (lastUnlocked(s) !== 4) return finish(false, 'The beacon needs light, water, and aligned shutters.');
@@ -97,6 +109,7 @@ export function objective(s) {
   if (!s.flags.drained) return 'Work out how the lower instruments read the sky.';
   if (!s.flags.prism) return 'Explore the newly drained Lens Chamber.';
   if (!s.flags.projector) return 'Find a home for the projection prism.';
+  if (!s.flags.beamAligned) return 'Aim the Dome’s shaft mirror into the Archive receiver. View both floors together.';
   if (!s.journal.includes('projection')) return 'Follow the restored beam. What has changed?';
   if (!s.flags.shutters) return 'Use the hidden instructions to align the shutters.';
   if (!s.flags.generator) return 'The final seal needs a steady source of power.';
@@ -109,7 +122,8 @@ export function hint(s) {
   else if (!s.flags.drained) { key = 'drain'; steps = ['An earlier room explains how to read this instrument.', 'Combine the Dome’s procession with the Archive’s maintenance memorandum.', 'Reverse the mural order: SUN → STAR → CRESCENT. Turn the water regulator.']; }
   else if (!s.flags.prism) { key = 'prism'; steps = ['The drained chamber contains a portable part.', 'Examine the triangular lens housing in the Lens Chamber.', 'Collect the prism from the central lens housing.']; }
   else if (!s.flags.projector) { key = 'projector'; steps = ['You have seen an empty socket that matches this object.', 'Return to the Broken Dome, above the Archive.', 'Use the projector on the right side of the Dome to install the prism.']; }
-  else if (!s.journal.includes('projection')) { key = 'projection'; steps = ['The restored light has changed an earlier room.', 'Follow the beam down into the Archive.', 'Inspect the formerly blank wall on the right of the Archive.']; }
+  else if (!s.flags.beamAligned) { key = 'light'; steps = ['The mirror and its receiver are on different floors. You need to see them together.', 'Use the shaft mirror beside the Dome’s southern stairs. Scroll partway down until its beam and the Archive’s silver receiver are visible.', 'Aim the beam into the silver receiver below, using the mirror handle or the left/right controls. Lock the beam while both ends are in view.']; }
+  else if (!s.journal.includes('projection')) { key = 'projection'; steps = ['The aligned light has changed an earlier room.', 'Follow the beam down into the Archive.', 'Inspect the formerly blank wall on the right of the Archive.']; }
   else if (!s.flags.shutters) { key = 'shutters'; steps = ['The hidden writing describes a sequence, not a final arrangement.', 'Return to the four numbered shutters in the Lens Chamber.', 'Press shutters 2, then 4, then 1, then 3.']; }
   else if (!s.flags.generator) { key = 'generator'; steps = ['The seal is aligned, but its power indicator is dark.', 'The Pump Room can send water to a different destination without flooding the chamber.', 'Use the routing lever on the right of the Pump Room to power the generator.']; }
   else { key = 'beacon'; steps = ['The deepest passage is now open.', 'Scroll down beyond the Lens Chamber to reach the Buried Beacon.', 'Find Elian in the Buried Beacon, then activate the central beacon.']; }

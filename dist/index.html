@@ -60,6 +60,14 @@
           <div id="hoverLabel" class="hover-label" hidden></div>
           <div id="travelPrompt" class="travel-prompt" hidden></div>
           <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+          <section id="lightControls" class="light-controls" aria-label="Shaft mirror adjustment" hidden>
+            <div class="light-controls-heading"><span class="eyebrow">ONE INSTRUMENT · TWO FLOORS</span><button id="leaveLight" class="close-button" aria-label="Leave mirror adjustment">×</button></div>
+            <p>Frame the mirror above and receiver below. Drag the mirror handle or turn it here.</p>
+            <p id="lightStatus" class="light-status" role="status" aria-live="polite"></p>
+            <div class="light-buttons"><button id="lightViewUp" class="secondary" aria-label="Scroll view up">View ↑</button><button id="lightViewDown" class="secondary" aria-label="Scroll view down">View ↓</button><button id="lightLeft" class="secondary" aria-label="Aim mirror left">Aim ←</button><button id="lightRight" class="secondary" aria-label="Aim mirror right">Aim →</button></div>
+            <button id="lockLight" class="primary">Lock beam <span>↗</span></button>
+            <small>↑ ↓ VIEW · ← → AIM · ENTER LOCK · ESC LEAVE</small>
+          </section>
         </div>
         <div class="controls-strip"><span><svg class="icon"><use href="#i-mouse"/></svg><b>MOVE</b> to explore <span class="control-divider">/</span> <b>CLICK</b> to investigate</span><span><b>SCROLL</b> down ↓ <span class="control-divider">/</span> up ↑</span></div>
       </section>

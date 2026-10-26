@@ -1,7 +1,8 @@
 import { SAVE_KEY, SYMBOLS, NOTES, freshState, restoreState, lastUnlocked, applyAction, objective, hint } from './state.mjs';
 import { W, H, ROOMS, isWalkable, safePosition, nearbyObject } from './rooms.mjs';
-import { makeScene, drawFrame } from './art.mjs';
+import { makeScene, drawFrame, drawLightPath } from './art.mjs';
 import { viewport, clampScroll, roomAtScroll, screenToWorld, worldToScreen, wheelDistance } from './camera.mjs';
+import { LIGHT_PATH, clampLightAim, lightEndpoint, lightInView, lightAligned } from './light.mjs';
 
 const $ = id => document.getElementById(id);
 const canvas = $('game'), ctx = canvas.getContext('2d');
@@ -15,6 +16,7 @@ try { saved = localStorage.getItem(SAVE_KEY); } catch { storageAvailable = false
 let state = restoreState(saved), running = false, target = null, pointer = null, busy = false, images = {}, lastTime = 0, moved = false, saveTime = 0, toastTimer, audio;
 let view = viewport(innerWidth, innerHeight), cameraY = state.room * H, scrollingUntil = 0, boundaryNotice = 0;
 const scenes = new Map(), roomPositions = new Map();
+let adjustingLight = false, lightAim = LIGHT_PATH.initialAim, lightDrag = null;
 state.player = safePosition(state.room, state.player);
 let hasSave = !!saved && state.version === 1;
 if (hasSave) { $('continueButton').hidden = false; $('beginButton').textContent = 'Begin a new descent ↓'; }
@@ -76,6 +78,42 @@ function scrollDungeon(distance) {
   cameraY = next; scrollingUntil = performance.now() + 140;
   target = null; pointer = null; $('hoverLabel').hidden = true;
   activateRoom(roomAtScroll(cameraY, lastUnlocked(state)));
+  updateLightControls();
+}
+function lightViewport() {
+  const r=$('lightControls').getBoundingClientRect();
+  return {...view,obstruction:{left:r.left,right:r.right,top:r.top,bottom:r.bottom}};
+}
+function updateLightControls() {
+  if (!adjustingLight) return;
+  const lightView=lightViewport(),visible=lightInView(cameraY,lightView),aligned=lightAligned(lightAim,cameraY,lightView);
+  const text=!visible?'Scroll between the Dome and Archive until both ends are in view.':aligned?'The receiver is lit. Lock the beam to hold this alignment.':'Both floors are in view. Turn the mirror until the beam enters the silver ring.';
+  if($('lightStatus').textContent!==text)$('lightStatus').textContent=text;
+  $('lockLight').disabled=!visible;
+}
+function leaveLight() {
+  adjustingLight=false;lightDrag=null;target=null;pointer=null;
+  $('lightControls').hidden=true;$('app').classList.remove('aiming-light');
+}
+function beginLight() {
+  if(!state.flags.projector)return description('The shaft mirror','An unlit mirror points down through a narrow slit in the stone. Restore the Dome projector first.');
+  if(state.flags.beamAligned)return description('The latched mirror','The brass catch holds the beam on the Archive receiver. The hidden writing is waiting below.');
+  adjustingLight=true;target=null;pointer=null;
+  $('hoverLabel').hidden=true;$('lightControls').hidden=false;$('app').classList.add('aiming-light');
+  updateLightControls();canvas.focus({preventScroll:true});
+}
+function turnLight(amount) {
+  lightAim=clampLightAim(Math.round((lightAim+amount)*1000)/1000);updateLightControls();
+}
+function lockLight() {
+  if(!adjustingLight||dialog.open)return;
+  const result=commit({type:'align_beam',aim:lightAim,scroll:cameraY,view:lightViewport()});
+  if(result.ok){leaveLight();canvas.focus({preventScroll:true});}
+  toast(result.message,6500);
+}
+function dragLight(p) {
+  if(p.y>LIGHT_PATH.source.y+8)lightAim=clampLightAim((p.x-LIGHT_PATH.source.x)/(p.y-LIGHT_PATH.source.y));
+  updateLightControls();
 }
 function toast(text, duration = 3800) {
   clearTimeout(toastTimer); $('toast').textContent = text; $('toast').hidden = false;
@@ -115,7 +153,7 @@ function openHint() {
 function openPuzzle(type) {
   if (type === 'entry' && state.flags.archive) return description('The celestial seal', 'The Archive is already open. Scroll down anywhere to descend.');
   if (type === 'pump' && state.flags.drained) return description('The latched regulator', 'The lower chamber is drained and the sluice has latched. The routing lever on the right can now supply the generator.');
-  if (type === 'shutters' && state.flags.shutters) return description('The aligned shutters', `The four shutters stand open. ${state.flags.generator&&state.flags.projector?'The final stairs are ready.':'The seal still needs light from the Dome projector and power from the Pump Room turbine.'}`);
+  if (type === 'shutters' && state.flags.shutters) return description('The aligned shutters', `The four shutters stand open. ${state.flags.generator&&state.flags.beamAligned?'The final stairs are ready.':'The seal still needs aligned light from the Dome mirror and power from the Pump Room turbine.'}`);
   if (type === 'shutters') return shutterPuzzle();
   const code = type === 'entry' ? ['sun','sun','sun'] : ['crescent','crescent','crescent'];
   const renderDial = (id) => `<span class="symbol" aria-hidden="true">${icons[id]}</span><small>${id.toUpperCase()}</small>`;
@@ -135,6 +173,7 @@ function shutterPuzzle() {
 function interact(o) {
   if (!o || busy || dialog.open) return;
   target = null;
+  if(o.id==='shaftMirror')return beginLight();
   if (o.puzzle) return openPuzzle(o.puzzle);
   if (o.text) return description(o.label, o.text);
   if (o.action === 'finish') {
@@ -143,7 +182,7 @@ function interact(o) {
   }
   if(o.action==='collect_prism'&&state.flags.prism)return description('An empty lens housing',state.flags.projector?'The prism is back in the Dome, carrying light into the Archive.':'You have the prism in your satchel. The empty projector upstairs is waiting for it.');
   if(o.action==='take_key'&&state.flags.key)return description('The maintenance desk','The maintenance key is safely in your satchel.');
-  if(o.action==='restore_projector'&&state.flags.projector)return description('A restored projector','The beam spills down a narrow shaft. Something in the Archive below must have changed.');
+  if(o.action==='restore_projector'&&state.flags.projector)return description('A restored projector',state.flags.beamAligned?'The aligned beam lights the Archive wall below.':'Light reaches the shaft mirror beside the southern stairs. Adjust that mirror while viewing the Dome and Archive together.');
   const r=commit({type:o.action});
   const noteIds={inspect_mural:'mural',inspect_reflection:'reflection',inspect_mentor:'mentor',inspect_plaque:'plaque',inspect_wall:'projection',collect_prism:'prism'};
   if(r.ok&&noteIds[o.action])return notePanel(noteIds[o.action]);
@@ -159,6 +198,7 @@ function instructions() {
   shell('YOUR FIRST DESCENT', 'Follow your little light', '<p class="dialog-copy">Move your mouse across the chamber. Your explorer follows, and walls stop them.<br><br>Walk close to objects, then click to investigate. Scroll down to go deeper, and scroll up to revisit earlier rooms. The dungeon moves continuously beneath you; solve each seal to unlock more of it.<br><br>Keep your field journal close. A clue from an earlier room may be exactly what you need below. Hints are always optional.</p><p class="journal-tag">ALSO: ARROW KEYS TO WALK · ENTER TO INTERACT<br>PAGE UP / DOWN TO TRAVEL · J JOURNAL · H HINT · F FULLSCREEN</p>', '<span class="journal-tag">NO CLOCK. NO PENALTIES.</span><button class="primary" data-close>Light the lantern <span>✧</span></button>');
 }
 function start(continueSave=false) {
+  leaveLight();lightAim=LIGHT_PATH.initialAim;
   if (!continueSave) { state=freshState();hasSave=true; }
   state.player=safePosition(state.room,state.player);running=true;target=null;pointer=null;roomPositions.clear();cameraY=state.room*H;
   $('startScreen').hidden=true;$('app').hidden=false;rebuildScene();resize();updateUI();save();
@@ -179,20 +219,54 @@ function doTravel(direction) {
 }
 function point(event){const r=canvas.getBoundingClientRect(),p=screenToWorld(event.clientX-r.left,event.clientY-r.top,view,cameraY),room=Math.floor(p.y/H);return{x:p.x,y:p.y-room*H,room};}
 function followPointer(event){
-  if(!running||dialog.open||busy)return;
+  if(!running||dialog.open||busy||adjustingLight)return;
   const p=point(event);
   if(p.room<0||p.room>lastUnlocked(state)||p.x<0||p.x>W){pointer=null;target=null;return;}
   activateRoom(p.room);pointer={x:p.x,y:p.y};target={...pointer};
 }
 function objectUnder(p){return ROOMS[state.room].objects.find(o=>Math.abs(p.x-o.x)<o.w/2+7&&Math.abs(p.y-o.y)<o.h/2+7);}
-canvas.addEventListener('pointermove',followPointer);
+canvas.addEventListener('pointermove',e=>{
+  if(adjustingLight){
+    if(dialog.open||!lightDrag)return;
+    if(lightDrag.kind==='mirror'){const p=point(e);dragLight({x:p.x,y:p.room*H+p.y});}
+    else {scrollDungeon((lightDrag.y-e.clientY)/view.scale);lightDrag.y=e.clientY;}
+    return;
+  }
+  followPointer(e);
+});
 canvas.addEventListener('pointerleave',()=>{target=null;pointer=null;$('hoverLabel').hidden=true;});
-canvas.addEventListener('pointerdown',e=>{if(!running||dialog.open||busy)return;canvas.focus({preventScroll:true});followPointer(e);if(e.pointerType==='touch')e.preventDefault();});
-canvas.addEventListener('click',e=>{if(!running||dialog.open||busy)return;const p=point(e);if(p.room!==state.room)return;const o=objectUnder(p);if(o){if(Math.hypot(o.x-state.player.x,o.y-state.player.y)<=42)interact(o);else toast('Move closer to investigate.',1800);}});
+canvas.addEventListener('pointerdown',e=>{
+  if(!running||dialog.open||busy)return;
+  canvas.focus({preventScroll:true});
+  if(adjustingLight){
+    const p=point(e),world={x:p.x,y:p.room*H+p.y},end=lightEndpoint(lightAim);
+    const length=Math.hypot(end.x-LIGHT_PATH.source.x,end.y-LIGHT_PATH.source.y);
+    const handle={x:LIGHT_PATH.source.x+(end.x-LIGHT_PATH.source.x)/length*23,y:LIGHT_PATH.source.y+(end.y-LIGHT_PATH.source.y)/length*23};
+    if(Math.hypot(world.x-handle.x,world.y-handle.y)<=18||Math.hypot(world.x-LIGHT_PATH.source.x,world.y-LIGHT_PATH.source.y)<=18)lightDrag={kind:'mirror'};
+    else if(e.pointerType==='touch')lightDrag={kind:'scroll',y:e.clientY};
+    if(lightDrag){canvas.setPointerCapture(e.pointerId);e.preventDefault();}
+    return;
+  }
+  followPointer(e);if(e.pointerType==='touch')e.preventDefault();
+});
+function endLightDrag(e){lightDrag=null;if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);}
+canvas.addEventListener('pointerup',endLightDrag);
+canvas.addEventListener('pointercancel',endLightDrag);
+canvas.addEventListener('lostpointercapture',()=>{lightDrag=null;});
+canvas.addEventListener('click',e=>{if(!running||dialog.open||busy||adjustingLight)return;const p=point(e);if(p.room!==state.room)return;const o=objectUnder(p);if(o){if(Math.hypot(o.x-state.player.x,o.y-state.player.y)<=42)interact(o);else toast('Move closer to investigate.',1800);}});
 document.addEventListener('wheel',e=>{if(!running||dialog.open||e.ctrlKey)return;e.preventDefault();scrollDungeon(wheelDistance(e.deltaY,e.deltaMode,view));},{passive:false});
 document.addEventListener('keydown',e=>{
   if(!running||dialog.open)return;
   const k=e.key.toLowerCase();
+  if(adjustingLight){
+    if(k==='escape'){e.preventDefault();leaveLight();canvas.focus({preventScroll:true});return;}
+    // Native buttons retain their Enter/Space behavior when tabbed to.
+    if(k==='enter'&&e.target.closest('button'))return;
+    if(k==='arrowleft'||k==='arrowright'){e.preventDefault();turnLight(k==='arrowleft'?-.05:.05);return;}
+    if(k==='arrowup'||k==='arrowdown'||k==='pageup'||k==='pagedown'){e.preventDefault();scrollDungeon(k==='arrowup'||k==='pageup'?-32:32);return;}
+    if(k==='enter'||k==='e'){e.preventDefault();lockLight();return;}
+    if(['w','a','s','d'].includes(k))return;
+  }
   if(k==='j'){e.preventDefault();openJournal();return;}if(k==='h'){e.preventDefault();openHint();return;}if(k==='escape'){menu();return;}
   if(k==='f'){e.preventDefault();toggleFullscreen();return;}
   if(k==='pagedown'||k==='pageup'){e.preventDefault();doTravel(k==='pagedown'?1:-1);return;}
@@ -206,12 +280,16 @@ $('beginButton').onclick=()=>hasSave?confirmNew():start(false);
 $('continueButton').onclick=()=>start(true);
 $('journalButton').onclick=openJournal;$('hintButton').onclick=openHint;$('menuButton').onclick=menu;$('titleLink').onclick=e=>{e.preventDefault();menu();};
 $('expeditionButton').onclick=openExpedition;
+$('leaveLight').onclick=()=>{leaveLight();canvas.focus({preventScroll:true});};
+$('lightViewUp').onclick=()=>scrollDungeon(-32);$('lightViewDown').onclick=()=>scrollDungeon(32);
+$('lightLeft').onclick=()=>turnLight(-.05);$('lightRight').onclick=()=>turnLight(.05);
+$('lockLight').onclick=lockLight;
 async function toggleFullscreen(){try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{toast('Fullscreen is unavailable here. F11 also fills the screen.');}}
 $('fullscreenButton').onclick=toggleFullscreen;
 document.addEventListener('fullscreenchange',()=>{const on=!!document.fullscreenElement;$('fullscreenButton').setAttribute('aria-pressed',String(on));$('fullscreenButton').setAttribute('aria-label',on?'Exit fullscreen':'Enter fullscreen');resize();});
 window.addEventListener('resize',resize);
 $('soundButton').onclick=()=>{state.muted=!state.muted;setAudio();updateUI();save();};
-window.addEventListener('blur',()=>{target=null;pointer=null;save();});
+window.addEventListener('blur',()=>{target=null;pointer=null;lightDrag=null;save();});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){target=null;pointer=null;save();audio?.context.suspend();}else if(!state.muted&&running)audio?.context.resume();});
 window.addEventListener('pagehide',save);
 
@@ -224,7 +302,7 @@ function setAudio(){
 function chime(quiet=0){if(state.muted||!audio)return;const {context,master}=audio;const osc=context.createOscillator(),gain=context.createGain();osc.type='sine';osc.frequency.value=quiet?440:659.25;gain.gain.setValueAtTime(0,context.currentTime);gain.gain.linearRampToValueAtTime(quiet?.025:.05,context.currentTime+.01);gain.gain.exponentialRampToValueAtTime(.001,context.currentTime+.35);osc.connect(gain).connect(master);osc.start();osc.stop(context.currentTime+.4);}
 function tick(time){
   const dt=Math.min((time-lastTime)/1000,.04)||0;lastTime=time;moved=false;
-  if(running&&!dialog.open&&!busy&&target){
+  if(running&&!dialog.open&&!busy&&!adjustingLight&&target){
     const dx=target.x-state.player.x,dy=target.y-state.player.y,dist=Math.hypot(dx,dy);
     if(dist>1){const step=Math.min(dist,67*dt),vx=dx/dist*step,vy=dy/dist*step;const p=state.player;
       if(isWalkable(state.room,p.x+vx,p.y)){p.x+=vx;moved=true;}
@@ -243,6 +321,8 @@ function tick(time){
       drawFrame(pc,roomScene(room),renderState,time/1000,active?near:null,active?pointer:null,active&&moved,images,reduced,active);
       ctx.drawImage(pixels,p.x,p.y,W*view.scale,height);
     }
+    drawLightPath(ctx,view,cameraY,state,lightAim,adjustingLight);
+    if(adjustingLight)updateLightControls();
     if(!dialog.open&&!busy&&pointer&&time>scrollingUntil){const o=objectUnder(pointer);if(o){const p=worldToScreen(o.x,state.room*H+o.y-o.h/2-10,view,cameraY);$('hoverLabel').hidden=false;$('hoverLabel').innerHTML=`${o.label}<small>${Math.hypot(o.x-state.player.x,o.y-state.player.y)<=42?'CLICK':'MOVE CLOSER'}</small>`;$('hoverLabel').style.left=`${Math.max(120,Math.min(view.width-120,p.x))}px`;$('hoverLabel').style.top=`${Math.max(45,p.y)}px`;}else $('hoverLabel').hidden=true;}else $('hoverLabel').hidden=true;
     $('travelPrompt').hidden=dialog.open;
     $('travelPrompt').textContent=cameraY<1?(lastUnlocked(state)>0?'SCROLL DOWN ↓ · THE DESCENT CONTINUES':'↓ SOLVE THE SEAL TO GO DEEPER'):cameraY>=lastUnlocked(state)*H-1?'↑ SCROLL UP TO REVISIT EARLIER ROOMS':'↑ RETURN · SCROLL TO EXPLORE · DESCEND ↓';
@@ -253,5 +333,5 @@ function tick(time){
 }
 for(const name of ['dome','archive','pump','lens','beacon','explorer']){const image=new Image();image.src=`./assets/${name}.webp`;image.onload=()=>{images[name]=image;if(running)rebuildScene();};}
 // Read-only observability helps verify movement and progression without adding cheat controls.
-Object.defineProperty(window,'observatory',{value:Object.freeze({get state(){return structuredClone(state);},get running(){return running;},get camera(){return{scrollY:cameraY,...view};}})});
+Object.defineProperty(window,'observatory',{value:Object.freeze({get state(){return structuredClone(state);},get running(){return running;},get camera(){return{scrollY:cameraY,...view};},get light(){return{adjusting:adjustingLight,aim:lightAim};}})});
 updateUI();requestAnimationFrame(tick);

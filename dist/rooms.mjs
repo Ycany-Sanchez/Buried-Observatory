@@ -5,6 +5,7 @@ export const ROOMS = [
     { id: 'telescope', x: 240, y: 116, w: 42, h: 24, label: 'Abandoned telescope', kind: 'telescope', text: 'The telescope is tilted toward the floor. There is no eyepiece. Fine brass channels carry light into the stone below.' },
     { id: 'projector', x: 370, y: 112, w: 24, h: 25, label: 'Moonlight projector', kind: 'projector', action: 'restore_projector' },
     { id: 'entrySeal', x: 196, y: 258, w: 23, h: 20, label: 'Celestial seal', kind: 'seal', puzzle: 'entry' },
+    { id: 'shaftMirror', x: 330, y: 258, w: 22, h: 20, label: 'Shaft mirror', kind: 'mirror' },
     { id: 'satchel', x: 96, y: 225, w: 19, h: 16, label: 'Elian’s satchel', kind: 'satchel', text: 'Elian’s initials are stitched inside. A lantern-shaped imprint rests in the dust, and a line of footprints leads to the southern stairs.' }
   ] },
   { name: 'The Archive', subtitle: 'Some words wait for light', depth: '12', color: '#bca078', objects: [

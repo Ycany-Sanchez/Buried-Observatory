@@ -9,6 +9,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const chromeArgs=['--headless=new','--disable-gpu','--no-first-run','--no-default-browser-check','--remote-debugging-port=9231','--user-data-dir='+path.join(root,'.browser-profile-qa'),'about:blank'];
 if(process.env.OBSERVATORY_QA_RESTRICTED==='1')chromeArgs.unshift('--no-sandbox');
 const chrome=spawn(process.env.OBSERVATORY_QA_CHROME||'C:/Program Files/Google/Chrome/Application/chrome.exe',chromeArgs,{stdio:['ignore','ignore','pipe'],windowsHide:true});
+const lightOnly=process.argv.includes('--light-only');
 chrome.stderr.on('data',data=>console.error(String(data).slice(0,1000)));chrome.on('exit',(code)=>console.log('Browser exit '+code));
 let ws,id=0;const pending=new Map(),errors=[];const keepAlive=setInterval(()=>{},1000);
 try{
@@ -26,13 +27,14 @@ try{
   await send('Runtime.enable');await send('Page.enable');await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
   await send('Page.navigate',{url:process.argv.includes('--portable')?pathToFileURL(path.join(root,'play.html')).href:'http://127.0.0.1:4173'});await sleep(1400);
   if(!process.argv.includes('--resume-check')){await evaluate("localStorage.clear();location.reload()");await sleep(1000);}
+  if(lightOnly){await evaluate(`localStorage.setItem('buried-observatory:v1',JSON.stringify({version:1,room:0,player:{x:330,y:230},flags:{archive:true,key:true,pump:true,drained:true,prism:true,projector:true,beamAligned:false},journal:['letter','mural','reflection','mentor','plaque','prism','light'],hints:{},muted:true}));location.reload()`);await sleep(1000);}
   await screenshot('01-title');
-  if(process.argv.includes('--resume-check'))await click('#continueButton');else{await click('#beginButton');await click('[data-close]');}
+  if(process.argv.includes('--resume-check')||lightOnly)await click('#continueButton');else{await click('#beginButton');await click('[data-close]');}
   await sleep(300);await screenshot('02-broken-dome');
   assert.equal(await evaluate('window.observatory.running'),true);
   assert.equal(await evaluate('(()=>{const r=document.querySelector("#game").getBoundingClientRect();return r.x===0&&r.y===0&&r.width===innerWidth&&r.height===innerHeight})()'),true,'Dungeon fills the browser viewport');
   console.log('PASS title, begin, instructions, initial rendering');
-  if(!process.argv.includes('--resume-check')){const before=await evaluate('JSON.stringify(window.observatory.state.player)');await click('#hintButton');for(let i=0;i<3;i++)await click('#nextHint');assert.ok((await evaluate('document.querySelector("#hintText").textContent')).includes('CRESCENT'));await click('[data-close]');assert.equal(await evaluate('JSON.stringify(window.observatory.state.player)'),before);await click('#journalButton');assert.equal(await evaluate('document.querySelectorAll(".journal-entry").length'),1);await click('[data-close]');console.log('PASS progressive hints, journal, overlay blocks movement');}
+  if(!process.argv.includes('--resume-check')&&!lightOnly){const before=await evaluate('JSON.stringify(window.observatory.state.player)');await click('#hintButton');for(let i=0;i<3;i++)await click('#nextHint');assert.ok((await evaluate('document.querySelector("#hintText").textContent')).includes('CRESCENT'));await click('[data-close]');assert.equal(await evaluate('JSON.stringify(window.observatory.state.player)'),before);await click('#journalButton');assert.equal(await evaluate('document.querySelectorAll(".journal-entry").length'),1);await click('[data-close]');console.log('PASS progressive hints, journal, overlay blocks movement');}
   if(process.argv.includes('--resume-check')){await click('#journalButton');await screenshot('journal-check');console.log(await evaluate('JSON.stringify({running:window.observatory.running,dialog:document.querySelector("#dialog").open,entries:document.querySelectorAll(".journal-entry").length,notes:window.observatory.state.journal})'));await click('[data-close]');await click('#soundButton');assert.equal(await evaluate('window.observatory.state.muted'),false);await click('#soundButton');}
   // Save optimized, faithful display-sized copies of generated assets.
   if(process.argv.includes('--optimize')){
@@ -41,14 +43,15 @@ try{
       await writeFile(path.join(root,'dist','assets',name+'.webp'),Buffer.from(data,'base64'));
     }console.log('PASS optimized artwork');
   }
-  if(process.argv.includes('--full')){
+  if(process.argv.includes('--full')||lightOnly){
     const pos=()=>evaluate('window.observatory.state');
     const worldPoint=async(x,y)=>evaluate(`(()=>{const r=document.querySelector('#game').getBoundingClientRect(),v=window.observatory.camera,s=window.observatory.state;return{x:r.x+v.x+${x}*v.scale,y:r.y+v.y+(s.room*320+${y}-v.scrollY)*v.scale}})()`);
     const walk=async(x,y)=>{const p=await worldPoint(x,y);await send('Input.dispatchMouseEvent',{type:'mouseMoved',...p});const start=Date.now();for(;;){const s=await pos();if(Math.hypot(s.player.x-x,s.player.y-y)<2)break;if(Date.now()-start>8000)throw Error(`Walking blocked at ${JSON.stringify(s.player)}, target ${x},${y}, room ${s.room}`);await sleep(90);}};
-    const objectClick=async(x,y)=>{const p=await worldPoint(x,y);await send('Input.dispatchMouseEvent',{type:'mouseMoved',...p});await send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...p});await send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...p});await sleep(130);assert.equal(await evaluate('document.querySelector("#dialog").open'),true,'Object opens dialog');};
+    const objectClick=async(x,y,opensDialog=true)=>{const p=await worldPoint(x,y);await send('Input.dispatchMouseEvent',{type:'mouseMoved',...p});await send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...p});await send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...p});await sleep(130);assert.equal(await evaluate('document.querySelector("#dialog").open'),opensDialog,'Object opens expected interaction');};
     const close=()=>click('[data-close]');
     const stairs=async direction=>{const before=(await pos()).room;const p=await worldPoint(240,160),scale=await evaluate('window.observatory.camera.scale');await send('Input.dispatchMouseEvent',{type:'mouseWheel',...p,deltaY:direction*320*scale,deltaX:0});await sleep(250);assert.equal((await pos()).room,before+direction,'Scroll reaches the adjacent room without requiring stairs');};
     const pathCenter=async()=>{const s=await pos();if(s.player.y<130){await walk(280,s.player.y);await walk(280,190);}else{await walk(280,s.player.y);await walk(280,190);}};
+    if(!lightOnly){
     // No remote interactions or scroll bypasses.
     let p=await worldPoint(240,160);await send('Input.dispatchMouseEvent',{type:'mouseWheel',...p,deltaY:1000,deltaX:0});await sleep(100);assert.equal((await pos()).room,0);
     await walk(104,108);await objectClick(104,82);await close();
@@ -71,7 +74,49 @@ try{
     await walk(270,240);await walk(270,90);await walk(240,90);await stairs(-1);
     await walk(280,240);await walk(280,85);await walk(240,85);await stairs(-1);
     await walk(300,240);await walk(340,160);await walk(370,143);await objectClick(370,112);await close();assert.equal((await pos()).flags.projector,true);
-    await walk(310,190);await walk(240,235);await stairs(1);console.log('PASS return to Dome with prism');
+    await walk(310,190);await walk(330,230);
+    }
+    await objectClick(330,258,false);
+    assert.equal(await evaluate('window.observatory.light.adjusting'),true,'Mirror opens an in-world adjustment');
+    assert.equal(await evaluate('document.querySelector("#lockLight").disabled'),true,'Cannot lock from a single-floor view');
+    const scrollView=async distance=>{const v=await evaluate('window.observatory.camera');await send('Input.dispatchMouseEvent',{type:'mouseWheel',x:720,y:400,deltaY:distance*v.scale,deltaX:0});await sleep(180);};
+    await scrollView(160);
+    assert.equal(await evaluate('Math.round(window.observatory.camera.scrollY)'),160);
+    const stationary=await evaluate('JSON.stringify(window.observatory.state.player)');
+    await click('#lockLight');assert.equal((await pos()).flags.beamAligned,false,'Wrong aim does not solve the puzzle');
+    await send('Input.dispatchKeyEvent',{type:'keyDown',key:'ArrowRight'});await send('Input.dispatchKeyEvent',{type:'keyUp',key:'ArrowRight'});
+    assert.equal(await evaluate('window.observatory.light.aim'),-.3,'Arrow keys turn the mirror');
+    await click('#lightLeft');assert.equal(await evaluate('window.observatory.light.aim'),-.35);
+    assert.equal(await evaluate('JSON.stringify(window.observatory.state.player)'),stationary,'Mirror controls do not move the explorer');
+    await screenshot('07-cross-floor-mirror');
+    await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await sleep(200);
+    assert.equal(await evaluate('document.documentElement.scrollWidth>innerWidth'),false);
+    assert.equal(await evaluate('document.querySelector("#lockLight").disabled'),false,'Narrow display can frame both ends');
+    await screenshot('08-mirror-mobile');
+    await send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:190,y:350}]});
+    await send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:190,y:324}]});
+    await send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await sleep(150);
+    assert.ok((await evaluate('window.observatory.camera.scrollY'))>180,'Touch swipe scrolls during mirror adjustment');
+    await click('#lightViewUp');await sleep(80);
+    await send('Emulation.setDeviceMetricsOverride',{width:390,height:568,deviceScaleFactor:1,mobile:true});await sleep(200);
+    for(let n=0;n<4&&await evaluate('document.querySelector("#lockLight").disabled');n++)await click('#lightViewDown');
+    assert.equal(await evaluate('document.querySelector("#lockLight").disabled'),false,'Short phone screen can frame both ends above its controls');
+    await screenshot('10-mirror-short-phone');
+    await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});await sleep(200);
+    await scrollView(160-(await evaluate('window.observatory.camera.scrollY')));
+    // Aim by dragging the actual mirror, then latch with the separate control.
+    const mirrorPoints=await evaluate('(()=>{const v=window.observatory.camera;return [258,420].map((y,i)=>({x:v.x+(i?371:330)*v.scale,y:v.y+(y-v.scrollY)*v.scale}))})()');
+    await send('Input.dispatchMouseEvent',{type:'mouseMoved',...mirrorPoints[0]});
+    await send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...mirrorPoints[0]});
+    await send('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,...mirrorPoints[1]});
+    await send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...mirrorPoints[1]});await sleep(100);
+    assert.ok((await evaluate('document.querySelector("#lightStatus").textContent')).includes('receiver is lit'));
+    await screenshot('09-mirror-aligned');
+    await click('#lockLight');assert.equal((await pos()).flags.beamAligned,true);
+    assert.equal(await evaluate('window.observatory.light.adjusting'),false);
+    if(!lightOnly){
+    await scrollView(-(await evaluate('window.observatory.camera.scrollY')));
+    await walk(310,190);await walk(240,235);await stairs(1);console.log('PASS prism return, cross-floor framing, wrong aim, keyboard, touch, drag, and latched beam');
     await walk(300,90);await walk(340,100);await objectClick(371,100);await close();assert.ok((await pos()).journal.includes('projection'));
     await walk(300,160);await walk(240,235);await stairs(1);
     await walk(300,100);await walk(363,147);await objectClick(363,181);await close();assert.equal((await pos()).flags.generator,true);
@@ -84,6 +129,11 @@ try{
     await click('#endingDone');await send('Page.reload');await sleep(900);await click('#continueButton');assert.equal((await pos()).flags.finished,true);assert.equal((await pos()).room,4);console.log('PASS persisted completed journey');
     assert.equal(await evaluate('window.observatory.running'),true,'Continue actually starts gameplay');await click('#journalButton');await screenshot('journal-check');assert.ok(await evaluate('document.querySelectorAll(".journal-entry").length')>=6);await close();
     await click('#soundButton');assert.equal((await pos()).muted,false);await click('#soundButton');console.log('PASS journal and audio controls');
+    }else{
+      await send('Page.reload');await sleep(600);await click('#continueButton');
+      assert.equal((await pos()).flags.beamAligned,true,'Aligned beam survives reload');
+      console.log('PASS focused mirror controls and persisted alignment');
+    }
   }
   await click('#expeditionButton');assert.equal(await evaluate('document.querySelector("#dialog").open'),true);await click('[data-close]');
   await click('#fullscreenButton');assert.equal(await evaluate('!!document.fullscreenElement'),true);await click('#fullscreenButton');assert.equal(await evaluate('!!document.fullscreenElement'),false);console.log('PASS expedition and fullscreen controls');

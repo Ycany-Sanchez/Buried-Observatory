@@ -1,5 +1,6 @@
 import { W, H, ROOMS } from './rooms.mjs';
 import { lastUnlocked } from './state.mjs';
+import { LIGHT_PATH, lightEndpoint } from './light.mjs';
 const palette = { gold: '#bda374', light: '#e2c58a', stone: '#324346', dark: '#0c1a20', teal: '#568881' };
 const hash = (x, y) => { const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return n - Math.floor(n); };
 function rect(c,x,y,w,h,color){c.fillStyle=color;c.fillRect(Math.round(x),Math.round(y),w,h);}
@@ -62,6 +63,8 @@ function drawObject(c,o,s,t,near){
     circle(c,0,7,16,'#726b4e',3);rect(c,-2,-2,4,14,'#95805b');line(c,0,4,-10,16,'#867650',2);line(c,0,4,10,16,'#867650',2);c.save();c.rotate(-.45);rect(c,-22,-8,42,9,'#9b8757');rect(c,-22,-8,42,2,'#d0b77b');rect(c,-24,-10,5,13,'#bfa36b');rect(c,15,-10,5,13,'#bfa36b');rect(c,-27,-7,3,7,'#223e4b');c.restore();
   }else if(kind==='projector'){
     rect(c,-12,-6,24,17,'#535343');rect(c,-14,9,28,4,'#7e7151');circle(c,0,-3,8,'#bca16c',2);if(s.flags.projector){symbol(c,'star',0,-3,5,'#edda9f');glow(c,0,-3,25,'#f3c56835');}else{rect(c,-4,-7,8,8,'#102025');line(c,-5,4,5,4,'#c1aa6e');}
+  }else if(kind==='mirror'){
+    rect(c,-10,-9,20,18,'#716749');rect(c,-8,-7,16,14,'#243c40');line(c,-6,5,6,-5,'#d9d9ad',3);circle(c,0,0,11,s.flags.beamAligned?'#bcd5a6':'#a68b5d');
   }else if(kind==='seal'){
     const open=o.id==='entrySeal'?s.flags.archive:s.flags.pump;rect(c,-10,-10,20,19,'#625e47');rect(c,-8,-8,16,15,'#263a39');circle(c,0,-1,6,open?'#9ab09a':'#bba06b');symbol(c,open?'star':'sun',0,-1,4,open?'#b7d0af':'#bba06b');
   }else if(kind==='desk'||kind==='keydesk'){
@@ -69,7 +72,7 @@ function drawObject(c,o,s,t,near){
     if(kind==='desk'){rect(c,-9,-7,15,12,'#bdb189');rect(c,-8,-6,13,1,'#e0cca2');for(let i=0;i<3;i++)line(c,-6,-2+i*3,2,-2+i*3,'#756e55');rect(c,8,-3,3,5,'#1e302e');}
     else if(!s.flags.key){circle(c,-5,-2,3,'#e0c17c');line(c,-2,0,7,4,'#e0c17c',2);line(c,4,2,3,5,'#e0c17c');}
   }else if(kind==='wall'){
-    rect(c,-13,-15,26,30,'#858a79');rect(c,-11,-13,22,26,'#b1b3a020');if(s.flags.projector){for(let i=0;i<4;i++)rect(c,-8+i*5,-3,2,6,'#f2d8a0');glow(c,0,0,24,'#ebce7d40');}else{for(let i=0;i<8;i++)rect(c,-9+hash(i,4)*18,-10+hash(i,8)*20,1,1,'#bbbea5');}
+    rect(c,-13,-15,26,30,'#858a79');rect(c,-11,-13,22,26,'#b1b3a020');if(s.flags.beamAligned){for(let i=0;i<4;i++)rect(c,-8+i*5,-3,2,6,'#f2d8a0');glow(c,0,0,24,'#ebce7d40');}else{circle(c,0,0,8,'#c5c7ac');circle(c,0,0,4,'#5d7777');}
   }else if(kind==='pump'){
     rect(c,-24,-14,48,28,'#49605b');rect(c,-22,-12,44,24,'#263f40');for(let i=-1;i<=1;i++){circle(c,i*14,-2,5,'#c1ac79');symbol(c,'sun',i*14,-2,3,'#8a956f');}rect(c,-22,-14,44,2,'#a59c71');rect(c,-19,13,5,5,'#71694b');rect(c,14,13,5,5,'#71694b');
   }else if(kind==='lever'){
@@ -100,10 +103,10 @@ export function drawFrame(c,scene,s,t,near,target,moving,images,reduced,showExpl
   for(const [from,to,on] of [[0,46,s.room>0],[282,320,open]])if(on){rect(c,222,from,36,to-from,'#1c3035');rect(c,217,from,5,to-from,'#31474a');rect(c,258,from,5,to-from,'#253a40');for(let y=from;y<to;y+=8){rect(c,223,y,34,1,'#62726c');rect(c,223,y+2,34,1,'#11262c');}}
   // The stairs are travel points, not holes that can teleport the explorer.
   for(const [yy,up]of [[46,true],[273,false]]){rect(c,222,yy-8,36,17,'#12242a');for(let i=0;i<5;i++){const y=yy-7+i*4;rect(c,223,y,34,2,up?'#697775':'#5b6b66');rect(c,223,y+2,34,1,'#1b2f34');}if((up&&s.room===0)||(!up&&!open)){rect(c,222,yy-8,36,18,'#142228b0');for(let i=0;i<5;i++)rect(c,225+i*7,yy-8,2,18,'#8b7b56');}else{line(c,235,yy+(up?3:-3),240,yy+(up?-2:2),'#bdad7b');line(c,240,yy+(up?-2:2),245,yy+(up?3:-3),'#bdad7b');}}
-  if(s.room===0&&s.flags.projector){glow(c,370,112,50,'#e5c66f22');line(c,370,110,410,45,'#eddb9850',3);}
-  if(s.room===1&&s.flags.projector){glow(c,370,100,47,'#f4d8953a');line(c,406,43,372,99,'#f9deac38',5);}
+  if(s.room===0&&s.flags.projector){glow(c,370,112,50,'#e5c66f22');line(c,370,112,330,258,'#eddb9850',2);}
+  if(s.room===1&&s.flags.beamAligned){glow(c,370,100,47,'#f4d8953a');}
   if(s.room===2){const phase=reduced?0:t;for(let i=0;i<16;i++){const yy=67+((i*13+phase*(s.flags.generator?18:7))%180);rect(c,408,yy,2,4,'#91aaa057');}if(!s.flags.drained){rect(c,213,234,95,27,'#32657470');for(let i=0;i<8;i++)line(c,215+i*11,247+Math.sin(phase+i)*2,221+i*11,247+Math.sin(phase+i)*2,'#91b1b35c');}if(s.flags.generator){glow(c,363,181,27,'#bbbf7130');symbol(c,'star',290,127,5,'#d6bc80');}}
-  if(s.room===3){for(let i=0;i<3;i++){const on=[s.flags.projector,s.flags.generator,s.flags.shutters][i];rect(c,223+i*15,244,5,3,on?'#c4ce98':'#4d5a50');}}
+  if(s.room===3){for(let i=0;i<3;i++){const on=[s.flags.beamAligned,s.flags.generator,s.flags.shutters][i];rect(c,223+i*15,244,5,3,on?'#c4ce98':'#4d5a50');}}
   const objects=ROOMS[s.room].objects;
   const behind=objects.filter(o=>o.y<=s.player.y),front=objects.filter(o=>o.y>s.player.y);
   for(const o of behind)drawObject(c,o,s,t,near?.id===o.id);
@@ -113,4 +116,28 @@ export function drawFrame(c,scene,s,t,near,target,moving,images,reduced,showExpl
   // A small targeting diamond keeps the mouse legible when a wall blocks the explorer.
   if(target&&Math.hypot(target.x-s.player.x,target.y-s.player.y)>12){c.strokeStyle='#c9b47e9a';c.beginPath();c.moveTo(target.x,target.y-3);c.lineTo(target.x+3,target.y);c.lineTo(target.x,target.y+3);c.lineTo(target.x-3,target.y);c.closePath();c.stroke();}
   if(!reduced){for(let i=0;i<14;i++){const x=60+hash(i,12)*360,y=60+((hash(i,7)*210+t*(1+hash(i,5)*2))%210);rect(c,x,y,1,1,'#d9d1ab'+(i%3===0?'66':'28'));}}
+}
+export function drawLightPath(c, view, scroll, state, aim, adjusting) {
+  if (!state.flags.projector) return;
+  const source = LIGHT_PATH.source, receiver = LIGHT_PATH.receiver;
+  const end = state.flags.beamAligned ? receiver : lightEndpoint(aim);
+  const screen = p => ({ x: view.x+p.x*view.scale, y: view.y+(p.y-scroll)*view.scale });
+  const a=screen(source), b=screen(end), r=screen(receiver);
+  const color=state.flags.beamAligned?'#e5efb5':'#ecd299';
+  c.save();
+  c.beginPath();c.rect(view.x,0,480*view.scale,view.height);c.clip();
+  c.lineCap='round';c.strokeStyle='#e4c16b20';c.lineWidth=9*view.scale;
+  c.beginPath();c.moveTo(a.x,a.y);c.lineTo(b.x,b.y);c.stroke();
+  c.strokeStyle=color;c.lineWidth=Math.max(1,view.scale*.8);c.stroke();
+  c.strokeStyle=state.flags.beamAligned?'#e5efb5':'#adb7aa';c.lineWidth=1.5;
+  c.beginPath();c.arc(r.x,r.y,10*view.scale,0,Math.PI*2);c.stroke();
+  if(adjusting){
+    const length=Math.hypot(end.x-source.x,end.y-source.y),handle=screen({x:source.x+(end.x-source.x)/length*23,y:source.y+(end.y-source.y)/length*23});
+    c.fillStyle='#172d31';c.strokeStyle=color;c.lineWidth=2;
+    c.beginPath();c.arc(handle.x,handle.y,Math.max(8,4*view.scale),0,Math.PI*2);c.fill();c.stroke();
+    c.fillStyle='#f4e3bd';c.font='10px monospace';c.textAlign='right';
+    c.fillText('DOME · MIRROR',a.x-16,a.y-18);
+    c.fillText('ARCHIVE · RECEIVER',r.x-16,r.y-20);
+  }
+  c.restore();
 }
