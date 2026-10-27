@@ -36,7 +36,18 @@ Gameplay pass validation:
 - `--hidpi-only`: startup at 480×320 with DPR 2 and transitions back to desktop pass. Every QA screenshot checks the camera, canvas backing dimensions, and rendering transform against the actual displayed size.
 - Standards/specification review completed. Crank collision/picking, shutter lower-edge hit areas, resize synchronization, and initial high-DPI transform issues were fixed and verified.
 
-Next work: item 5 (story pacing), the remaining item 7 journal work, and item 8 (a playable ending). Start a new descent to replay the revised puzzles; existing saves retain their solved mechanisms.
+Payoff pass: complete story pacing, the illustrated journal, and a playable ascent with Elian. Keep the five rooms, current puzzle solutions, pixel art, and mouse-follow controls. Existing saves retain solved mechanisms.
+
+### Payoff implementation and acceptance
+
+- Early notes describe an uncharted passage, rising water, and a dry ledge. Footprints at the satchel, a one-time captioned/audible pipe discovery, and an unfinished Lens diagram build the trail. Elian explains the rescue purpose at reunion.
+- The journal shows a discovered-page list beside a selected illustrated note on desktop, stacked on phones. One discovered note can be pinned/replaced/unpinned and survives reloads. Desktop shows the pinned sketch and text; widths ≤800px or heights ≤600px use a compact reference button. Consulting any note preserves puzzle drafts.
+- `flags.beaconLit` starts the ascent; `flags.finished` now means escaping through the Dome. Talk with Elian before lighting the beacon. Light blooms locally and rises through the rooms, then the player returns upward with Elian following collision-safe routes. Floor changes place both near a valid stair arrival; navigation/animation timing are transient.
+- The ascent keeps all rooms accessible and latches turbine power. The Dome's upper gate opens and becomes the final interaction. Completion explicitly says “You and Elian made it home,” with options to revisit or begin a new descent through the existing restart confirmation.
+- Reloading during ascent restores Elian near the player and steady lighting without replaying activation. Older completed saves migrate to both completion flags true. Invalid pin references are discarded; discovered notes, inventory, drafts, and solved mechanisms remain valid.
+- Reduced motion shows steady restored light without signal travel. There are no timers, escort failures, or additional puzzles.
+- Verify local discoveries, pin eligibility/persistence, draft preservation, signal/reunion/exit gates, companion navigation, interrupted ascent, legacy saves, desktop/phone layouts, high-DPI resize, reduced motion, the complete journey, and `play.html`.
+- Apply redesign-existing-projects to journal readability and placement; animate to the one-time signal and restored-world feedback; implement/code-review workflows to delivery and review. Use Conventional Commits.
 
 ## 2. Give each room a distinct shape — complete
 
@@ -56,9 +67,11 @@ Add obstacle avoidance and an optional click-to-approach-and-investigate interac
 
 Mouse-follow movement routes around walls, fixtures, shelves, and basin edges. Clicking a distant object walks the explorer over and investigates on arrival. Continuous held-key movement uses direct collision-safe control; pointer movement can cancel an approach. Speed increased from 67 to 94 world units per second, and routes are smoothed to avoid grid-shaped movement. Navigation grids warm during idle time.
 
-## 5. Reveal Elian's story gradually — planned
+## 5. Reveal Elian's story gradually — complete
 
 Spread the transmitter explanation and rescue plan across footprints, sounds, unfinished diagrams, and later discoveries.
+
+The opening letter and Archive page no longer explain the transmitter or rescue plan. The satchel records a fresh trail, the Pump Room records captioned pipe taps only once, and the Lens schematic becomes a discoverable journal entry. The beacon reunion reveals what the observatory was for. Discovery and progression tests pass.
 
 ## 6. Make solved puzzles transform the observatory — complete
 
@@ -66,12 +79,14 @@ Show water draining, the turbine spinning, light crossing floors, and shutters o
 
 Water visibly recedes from the basin, the routing lever moves as turbine power rises/falls, the waterwheel spins with power, and shutter leaves lift as their tabs are operated. Pickups disappear from their housings/desks, solved doors expose stairs, and successful operations produce a brief local glow and a distinct sound cue when audio is enabled. Reduced-motion mode uses immediate water/lever/shutter states and keeps the wheel still.
 
-## 7. Improve the journal during puzzles — planned
+## 7. Improve the journal during puzzles — complete
 
 Add clue sketches, a pinned-clue view, and persistent unfinished puzzle inputs when consulting notes.
 
-Partial progress: introductory dials, pump dials, and unfinished shutter sequences now persist. Clue sketches and a pinned-clue view remain planned.
+Illustrated pages, a selected-note reading view, and one saved pinned clue are implemented. Desktop keeps a compact sketch/text reference visible; small screens use a reference button that opens the note and returns to the current puzzle. Introductory dials, pump dials, and unfinished shutter sequences persist throughout. Browser checks cover changing/removing pins, phone references, journal visits, and reloads.
 
-## 8. Give the ending a playable payoff — planned
+## 8. Give the ending a playable payoff — in progress
 
 Let the beacon beam rise through the unlocked floors, wake the machinery, and reveal the answering light before Elian's final line.
+
+The complete playable ascent is implemented and its focused browser check passes: reunion before beacon activation, a rising signal, Elian's collision-safe following, restored rooms, latched power, a visible Dome exit, and an explicit completion screen. Interrupted-ascent and legacy-completion saves are checked. Final full-journey verification and review remain.

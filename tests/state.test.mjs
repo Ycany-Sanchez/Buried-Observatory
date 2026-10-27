@@ -15,7 +15,8 @@ test('the complete mystery requires a connected return journey',()=>{
   s=act(s,'align_beam',{aim:.25,scroll:160,view:viewport(1440,1000)});
   s=travel(s,1);s=act(s,'inspect_wall');assert.ok(s.journal.includes('projection'));
   s=travel(s,1);s=act(s,'route_generator');s=travel(s,1);s=act(s,'solve_shutters',{code:['2','4','1','3']});
-  assert.equal(lastUnlocked(s),4);s=travel(s,1);s=act(s,'meet_mentor');s=act(s,'finish');assert.equal(s.flags.finished,true);
+  assert.equal(lastUnlocked(s),4);s=travel(s,1);s=act(s,'meet_mentor');s=act(s,'finish');assert.equal(s.flags.beaconLit,true);assert.equal(s.flags.finished,false);
+  for(let i=0;i<4;i++)s=travel(s,-1);s=act(s,'escape');assert.equal(s.flags.finished,true);
   assert.deepEqual(restoreState(JSON.stringify(s)),s);
 });
 test('wrong answers and remote interactions cannot mutate progression',()=>{

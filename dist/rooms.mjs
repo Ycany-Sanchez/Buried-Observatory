@@ -9,6 +9,7 @@ export const ROOM_FEATURES = [
 ];
 export const ROOMS = [
   { name: 'Broken Dome', subtitle: 'Where the sky fell in', depth: '00', color: '#9a9d8a', objects: [
+    { id:'surfaceExit',x:240,y:52,w:26,h:14,label:'Upper gate',kind:'exit',action:'escape' },
     { id: 'mural', x: 104, y: 82, w: 50, h: 22, label: 'Celestial mural', kind: 'mural', action: 'inspect_mural' },
     { id: 'telescope', x: 240, y: 116, w: 42, h: 24, label: 'Abandoned telescope', kind: 'telescope', text: 'The telescope is tilted toward the floor. There is no eyepiece. Fine brass channels carry light into the stone below.' },
     { id: 'projector', x: 370, y: 112, w: 24, h: 25, label: 'Moonlight projector', kind: 'projector', action: 'restore_projector' },

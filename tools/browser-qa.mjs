@@ -3,6 +3,7 @@ import { writeFile, mkdir } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import { isWalkable } from '../dist/rooms.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const output=path.join(root,'qa');await mkdir(output,{recursive:true});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -11,6 +12,7 @@ if(process.env.OBSERVATORY_QA_RESTRICTED==='1')chromeArgs.unshift('--no-sandbox'
 const chrome=spawn(process.env.OBSERVATORY_QA_CHROME||'C:/Program Files/Google/Chrome/Application/chrome.exe',chromeArgs,{stdio:['ignore','ignore','pipe'],windowsHide:true});
 const lightOnly=process.argv.includes('--light-only');
 const journalOnly=process.argv.includes('--journal-only');
+const rescueOnly=process.argv.includes('--rescue-only');
 const instrumentsOnly=process.argv.includes('--instruments-only'),reducedMotion=process.argv.includes('--reduced-motion');
 chrome.stderr.on('data',data=>console.error(String(data).slice(0,1000)));chrome.on('exit',(code)=>console.log('Browser exit '+code));
 let ws,id=0;const pending=new Map(),errors=[];const keepAlive=setInterval(()=>{},1000);
@@ -32,8 +34,9 @@ try{
   if(!process.argv.includes('--resume-check')){await evaluate("localStorage.clear();location.reload()");await sleep(1000);}
   if(lightOnly){await evaluate(`localStorage.setItem('buried-observatory:v1',JSON.stringify({version:1,room:0,player:{x:330,y:230},flags:{archive:true,key:true,pump:true,drained:true,prism:true,projector:true,beamAligned:false},journal:['letter','mural','reflection','mentor','plaque','prism','light'],hints:{},muted:true}));location.reload()`);await sleep(1000);}
   if(instrumentsOnly||journalOnly){await evaluate(`localStorage.setItem('buried-observatory:v1',JSON.stringify({version:1,room:2,player:{x:160,y:111},flags:{archive:true,key:true,pump:true},journal:['letter','mural','reflection','plaque'],hints:{},muted:true}));location.reload()`);await sleep(700);}
+  if(rescueOnly){await evaluate(`localStorage.setItem('buried-observatory:v1',JSON.stringify({version:1,room:4,player:{x:275,y:169},flags:{archive:true,key:true,pump:true,drained:true,prism:true,projector:true,beamAligned:true,generator:true,shutters:true},journal:['letter','mural','reflection','plaque','prism','light','projection'],hints:{},muted:true}));location.reload()`);await sleep(700);}
   await screenshot('01-title');
-  if(process.argv.includes('--resume-check')||lightOnly||instrumentsOnly||journalOnly)await click('#continueButton');else{await click('#beginButton');await click('[data-close]');}
+  if(process.argv.includes('--resume-check')||lightOnly||instrumentsOnly||journalOnly||rescueOnly)await click('#continueButton');else{await click('#beginButton');await click('[data-close]');}
   await sleep(300);await screenshot('02-broken-dome');
   assert.equal(await evaluate('window.observatory.running'),true);
   assert.equal(await evaluate('(()=>{const r=document.querySelector("#game").getBoundingClientRect();return r.x===0&&r.y===0&&r.width===innerWidth&&r.height===innerHeight})()'),true,'Dungeon fills the browser viewport');
@@ -41,7 +44,7 @@ try{
   if(process.argv.includes('--hidpi-only')){
     await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});await sleep(200);await screenshot('17-hidpi-to-desktop');
   }
-  if(!process.argv.includes('--resume-check')&&!lightOnly&&!instrumentsOnly&&!journalOnly){const before=await evaluate('JSON.stringify(window.observatory.state.player)');await click('#hintButton');for(let i=0;i<3;i++)await click('#nextHint');assert.ok((await evaluate('document.querySelector("#hintText").textContent')).includes('CRESCENT'));await click('[data-close]');assert.equal(await evaluate('JSON.stringify(window.observatory.state.player)'),before);await click('#journalButton');assert.equal(await evaluate('document.querySelectorAll(".journal-entry").length'),1);await click('[data-close]');console.log('PASS progressive hints, journal, overlay blocks movement');}
+  if(!process.argv.includes('--resume-check')&&!lightOnly&&!instrumentsOnly&&!journalOnly&&!rescueOnly){const before=await evaluate('JSON.stringify(window.observatory.state.player)');await click('#hintButton');for(let i=0;i<3;i++)await click('#nextHint');assert.ok((await evaluate('document.querySelector("#hintText").textContent')).includes('CRESCENT'));await click('[data-close]');assert.equal(await evaluate('JSON.stringify(window.observatory.state.player)'),before);await click('#journalButton');assert.equal(await evaluate('document.querySelectorAll(".journal-entry").length'),1);await click('[data-close]');console.log('PASS progressive hints, journal, overlay blocks movement');}
   if(process.argv.includes('--resume-check')){await click('#journalButton');await screenshot('journal-check');console.log(await evaluate('JSON.stringify({running:window.observatory.running,dialog:document.querySelector("#dialog").open,entries:document.querySelectorAll(".journal-entry").length,notes:window.observatory.state.journal})'));await click('[data-close]');await click('#soundButton');assert.equal(await evaluate('window.observatory.state.muted'),false);await click('#soundButton');}
   if(journalOnly){
     const pump=await evaluate('(()=>{const v=window.observatory.camera;return{x:v.x+160*v.scale,y:v.y+(640+142-v.scrollY)*v.scale}})()');
@@ -63,6 +66,31 @@ try{
     await click('#unpinNote');assert.equal(await evaluate('window.observatory.state.pinnedNote'),null);
     await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});await sleep(150);
     console.log('PASS illustrated journal, replacing/unpinning clues, phone reference, drafts and saved pin');
+  }
+  if(rescueOnly){
+    const until=async(expression,message)=>{const start=Date.now();while(!await evaluate(expression)){if(Date.now()-start>9000)throw Error(message);await sleep(80);}};
+    const tap=async(x,y)=>{const p=await evaluate(`(()=>{const v=window.observatory.camera,s=window.observatory.state;return{x:v.x+${x}*v.scale,y:v.y+(s.room*320+${y}-v.scrollY)*v.scale}})()`);await send('Input.dispatchMouseEvent',{type:'mouseMoved',...p});await send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...p});await send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...p});await sleep(100);};
+    const ascend=async()=>{const v=await evaluate('window.observatory.camera');await send('Input.dispatchMouseEvent',{type:'mouseWheel',x:v.width/2,y:v.height/2,deltaY:-320*v.scale,deltaX:0});await sleep(200);};
+    await tap(240,169);await until('document.querySelector("#dialog").open','Beacon did not respond');assert.equal(await evaluate('window.observatory.state.flags.beaconLit'),false);await click('[data-close]');
+    await tap(350,155);await until('document.querySelector("#dialog").open','Explorer did not reach Elian');assert.ok((await evaluate('window.observatory.state.journal')).includes('reunion'));await click('[data-close]');
+    await tap(240,169);await until('!!document.querySelector("#lightBeacon")','Beacon control did not open');await click('#lightBeacon');
+    assert.equal(await evaluate('window.observatory.state.flags.beaconLit'),true);assert.equal(await evaluate('window.observatory.state.flags.finished'),false);assert.ok(await evaluate('window.observatory.companion'));
+    if(reducedMotion)assert.equal(await evaluate('window.observatory.effects.signal'),1);else assert.ok((await evaluate('window.observatory.effects.signal'))<1);
+    await screenshot('20-beacon-activation');await ascend();assert.equal(await evaluate('window.observatory.companion.room'),3);
+    const destination=await evaluate('(()=>{const v=window.observatory.camera;return{x:v.x+300*v.scale,y:v.y+(960+255-v.scrollY)*v.scale}})()');await send('Input.dispatchMouseEvent',{type:'mouseMoved',...destination});
+    await until('Math.hypot(window.observatory.state.player.x-300,window.observatory.state.player.y-255)<2','Ascent movement did not reach the destination');
+    await until('(()=>{const c=window.observatory.companion,p=window.observatory.state.player;return Math.hypot(c.x-p.x,c.y-p.y)<30})()','Elian did not follow');
+    const companion=await evaluate('window.observatory.companion');assert.ok(isWalkable(companion.room,companion.x,companion.y));await screenshot('21-ascending-with-elian');
+    await send('Page.reload');await sleep(700);await click('#continueButton');assert.equal(await evaluate('window.observatory.state.flags.finished'),false);assert.equal(await evaluate('window.observatory.companion.room'),3);assert.equal(await evaluate('window.observatory.effects.signal'),1);
+    await ascend();await tap(363,181);await until('Math.hypot(window.observatory.state.player.x-363,window.observatory.state.player.y-181)<=39','Explorer did not reach the routing lever');await sleep(150);assert.equal(await evaluate('window.observatory.state.flags.generator'),true);
+    await send('Emulation.setDeviceMetricsOverride',{width:390,height:568,deviceScaleFactor:1,mobile:true});await sleep(150);await ascend();await ascend();assert.equal(await evaluate('window.observatory.state.room'),0);
+    await screenshot('22-dome-exit-phone');await tap(240,52);await until('window.observatory.state.flags.finished','The upper gate did not complete the rescue');
+    assert.equal(await evaluate('window.observatory.companion'),null);assert.ok((await evaluate('document.querySelector("#dialogTitle").textContent')).includes('made it home'));await screenshot('23-rescue-complete');
+    await click('#endingDone');await send('Page.reload');await sleep(700);await click('#continueButton');assert.equal(await evaluate('window.observatory.state.flags.finished'),true);
+    await evaluate("(()=>{const s=window.observatory.state;delete s.flags.beaconLit;s.room=4;localStorage.setItem('buried-observatory:v1',JSON.stringify(s));location.reload()})()");await sleep(700);await click('#continueButton');
+    assert.equal(await evaluate('window.observatory.state.flags.beaconLit'),true);assert.equal(await evaluate('window.observatory.state.flags.finished'),true);assert.equal(await evaluate('window.observatory.companion'),null);
+    await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});await sleep(150);
+    console.log('PASS reunion gate, beacon signal, companion ascent, resume, latched power, phone exit, completion and legacy save');
   }
   if(process.argv.includes('--movement-only')){
     const toScreen=async(x,y)=>evaluate(`(()=>{const v=window.observatory.camera;return{x:v.x+${x}*v.scale,y:v.y+(${y}-v.scrollY)*v.scale}})()`);
@@ -206,8 +234,10 @@ try{
     for(const n of [2,4,1,3])await click(`[data-shutter="${n}"]`);await click('#solveShutters');
     assert.equal((await pos()).flags.shutters,true);await walk(300,255);await walk(240,255);await stairs(1);
     await walk(300,105);await walk(350,125);await objectClick(350,155);await close();await walk(295,150);await walk(275,169);await objectClick(240,169);await click('#lightBeacon');
-    assert.equal((await pos()).flags.finished,true);await screenshot('04-ending');console.log('PASS full connected solution and ending');
-    await click('#endingDone');await send('Page.reload');await sleep(900);await click('#continueButton');assert.equal((await pos()).flags.finished,true);assert.equal((await pos()).room,4);console.log('PASS persisted completed journey');
+    assert.equal((await pos()).flags.beaconLit,true);assert.equal((await pos()).flags.finished,false);await screenshot('20-beacon-activation');
+    for(let n=0;n<4;n++)await stairs(-1);
+    await walk(240,80);await objectClick(240,52);assert.equal((await pos()).flags.finished,true);await screenshot('04-ending');console.log('PASS full connected solution, companion ascent and Dome escape');
+    await click('#endingDone');await send('Page.reload');await sleep(900);await click('#continueButton');assert.equal((await pos()).flags.finished,true);assert.equal((await pos()).room,0);console.log('PASS persisted completed journey');
     assert.equal(await evaluate('window.observatory.running'),true,'Continue actually starts gameplay');await click('#journalButton');await screenshot('journal-check');assert.ok(await evaluate('document.querySelectorAll(".journal-entry").length')>=6);await close();
     await click('#soundButton');assert.equal((await pos()).muted,false);await click('#soundButton');console.log('PASS journal and audio controls');
     }else{

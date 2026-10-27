@@ -6,6 +6,7 @@ import { LIGHT_PATH, clampLightAim, lightHandle, lightInView, lightAligned } fro
 import { routeTo, clearPath, prepareNavigation } from './navigation.mjs';
 import { instrumentPart } from './instruments.mjs';
 import { clueSketch } from './journal.mjs';
+import { createCompanion, advanceCompanion } from './companion.mjs';
 
 const $ = id => document.getElementById(id);
 const canvas = $('game'), ctx = canvas.getContext('2d');
@@ -29,6 +30,7 @@ function warmNavigation(){if(nextNavigationRoom>=ROOMS.length)return;prepareNavi
 if(window.requestIdleCallback)window.requestIdleCallback(warmNavigation);else setTimeout(warmNavigation,40);
 let activeInstrument=null,instrumentDrag=null,suppressCanvasClick=false;
 let journalSelection=state.journal.at(-1),renderedPinnedNote;
+let companion=null,signalStartedAt=null;
 let visual={water:state.flags.drained?0:1,power:state.flags.generator?1:0,shutters:[0,0,0,0],crank:0,wheel:0,pulse:null};
 state.player = safePosition(state.room, state.player);
 let hasSave = !!saved && state.version === 1;
@@ -44,7 +46,7 @@ function updateUI() {
   $('roomName').textContent = room.name;
   $('roomNumber').textContent = `CHAMBER ${roman[state.room]} / V`;
   $('depthValue').textContent = room.depth;
-  $('roomSubtitle').textContent = room.subtitle;
+  $('roomSubtitle').textContent = state.flags.beaconLit?'A way back to daylight':room.subtitle;
   $('objectiveText').textContent = objective(state);
   $('hudObjective').textContent = objective(state);
   $('roomProgress').textContent = `${String(last + 1).padStart(2, '0')} / 05`;
@@ -85,11 +87,17 @@ function resize() {
 }
 function activateRoom(room) {
   if (room === state.room || room < 0 || room > lastUnlocked(state)) return;
+  const previous=state.room;
   roomPositions.set(state.room, { ...state.player });
   state.room = room;
-  state.player = safePosition(room, roomPositions.get(room) || { x: 240, y: 67 });
+  state.player = safePosition(room,state.flags.beaconLit&&!state.flags.finished?{x:240,y:room<previous?257:67}:roomPositions.get(room)||{x:240,y:67});
+  syncCompanion();
   target = null; pointer = null; updateUI(); save();
   discoverRoom();
+}
+function syncCompanion(){
+  if(!state.flags.beaconLit||state.flags.finished){companion=null;return;}
+  if(!companion||companion.room!==state.room)companion=createCompanion(state.room,state.player);
 }
 function discoverRoom(){
   const result=applyAction(state,{type:'enter_room'});
@@ -198,7 +206,7 @@ function openExpedition() {
   shell('YOUR EXPEDITION', 'A thread through the dark', `<p class="dialog-note">${objective(state)}</p><div class="expedition-details"><section><p class="section-label">THE DESCENT</p><ol class="room-list">${$('roomList').innerHTML}</ol></section><section><p class="section-label">IN YOUR SATCHEL</p><div class="inventory-items">${$('inventoryItems').innerHTML}</div></section></div>`, '<span class="journal-tag">SCROLL DOWN TO DESCEND · UP TO RETURN</span><button class="secondary" data-close>Keep exploring <span>↗</span></button>');
 }
 function openHint() {
-  if (state.flags.finished) return description('You found your way', 'The beacon is lit. You can keep exploring the observatory, or begin another descent from the menu.');
+  if (state.flags.finished) return description('You both made it home', 'Your journey is complete. Revisit the observatory freely, or begin a new descent from the menu.');
   const h = hint(state), level = state.hints[h.key] || 0;
   shell('A LITTLE DIRECTION', 'Every clue has a home', `<p class="dialog-copy">A hint starts small. Ask again only when you need a stronger nudge.</p>${level?`<p class="hint-step">HINT ${level} OF 3</p><p class="dialog-note" id="hintText">${h.steps[level-1]}</p>`:'<p class="dialog-note" id="hintText">Ready for a nudge?</p>'}`, `<span class="journal-tag">NO PENALTIES. TAKE YOUR TIME.</span><button class="primary" id="nextHint">${level===3?'Read again':level?'A stronger hint':'Show first hint'} <span>✧</span></button>`);
   $('nextHint').onclick = () => { state.hints[h.key] = Math.min(3, (state.hints[h.key] || 0) + 1); save(); openHint(); };
@@ -261,12 +269,18 @@ function finishInstrumentDrag(){
 function interact(o) {
   if (!o || busy || dialog.open) return;
   target = null;
+  if(o.action==='escape'){
+    const result=commit({type:'escape'});if(result.ok){syncCompanion();ending();}else description('The upper gate',result.message);return;
+  }
+  if(o.id==='elian'&&state.flags.beaconLit)return description('Elian’s resting place','A folded blanket marks the dry ledge. Elian is already on the way back with you.');
   if(o.id==='shaftMirror')return beginLight();
   if (o.puzzle) return openPuzzle(o.puzzle);
   if (o.text) return description(o.label, o.text);
   if (o.action === 'finish') {
+    if(state.flags.beaconLit)return description('The beacon is burning','Its light holds the upper gate open. Return to the Broken Dome and leave through the opening above.');
+    if(!state.journal.includes('reunion'))return description('Someone is waiting','Elian is beside the eastern wall. Speak with him before sending the signal.');
     shell('THE BURIED BEACON', 'Send a light home', '<p class="dialog-copy">The restored lens hums softly. Water turns the turbine somewhere above. With a single turn of the brass wheel, you can send your signal through the mountain.</p>', '<button class="secondary" data-close>Look around first</button><button class="primary" id="lightBeacon">Light the beacon <span>✧</span></button>');
-    $('lightBeacon').onclick = () => { const r=commit({type:'finish'});if(r.ok)ending();else toast(r.message); };return;
+    $('lightBeacon').onclick = () => { const r=commit({type:'finish'});if(r.ok){dialog.close();beginAscent(r.message);}else toast(r.message); };return;
   }
   if(o.action==='collect_prism'&&state.flags.prism)return description('An empty lens housing',state.flags.projector?'The prism is back in the Dome, carrying light into the Archive.':'You have the prism in your satchel. The empty projector upstairs is waiting for it.');
   if(o.action==='take_key'&&state.flags.key)return description('The maintenance desk','The maintenance key is safely in your satchel.');
@@ -280,8 +294,11 @@ function interact(o) {
   description(o.label,r.message);
 }
 function ending() {
-  shell('THE END OF THE DESCENT', 'A light answers.', '<div class="ending-star" aria-hidden="true">✧</div><p class="dialog-copy">A column of warm light climbs through the mountain.<br>For a moment, the observatory is quiet.<br><br>Then, far above, a light answers.<br><br>Elian takes your hand. “Let’s go home.”</p>', '<button class="primary" id="endingDone">Stay a little longer <span>✧</span></button>');
-  $('dialogContent').firstElementChild.classList.add('ending');$('endingDone').onclick=()=>dialog.close();
+  shell('JOURNEY COMPLETE', 'You and Elian made it home.', `${clueSketch('reunion')}<p class="dialog-copy">Cool morning air replaces the dust.<br>Behind you, the mountain holds a little light.<br><br>Elian looks back at the open gate.<br>“A way home. All this time.”</p>`, '<button class="secondary" id="endingDone">Revisit the observatory</button><button class="primary" id="endingNew">Begin a new descent</button>');
+  $('dialogContent').firstElementChild.classList.add('ending');$('endingDone').onclick=()=>dialog.close();$('endingNew').onclick=confirmNew;
+}
+function beginAscent(message){
+  leaveLight();leaveInstrument();heldDirections.clear();target=null;pointer=null;signalStartedAt=performance.now()/1000;syncCompanion();toast(message,9000);
 }
 function instructions() {
   shell('YOUR FIRST DESCENT', 'Follow your little light', '<p class="dialog-copy">Move your mouse across the chamber. Your explorer follows and finds a way around obstacles.<br><br>Click an object to walk over and investigate it. Hold arrow keys or WASD for direct control. Scroll down to go deeper, and scroll up to revisit earlier rooms.<br><br>Keep your field journal close. A clue from an earlier room may be exactly what you need below. Hints are always optional.</p><p class="journal-tag">ENTER TO INTERACT · PAGE UP / DOWN TO TRAVEL<br>J JOURNAL · H HINT · F FULLSCREEN</p>', '<span class="journal-tag">NO CLOCK. NO PENALTIES.</span><button class="primary" data-close>Light the lantern <span>✧</span></button>');
@@ -290,13 +307,15 @@ function start(continueSave=false) {
   leaveLight();leaveInstrument();lightAim=LIGHT_PATH.initialAim;
   if (!continueSave) { state=freshState();hasSave=true; }
   journalSelection=state.journal.at(-1);
+  companion=null;signalStartedAt=null;
   state.player=safePosition(state.room,state.player);running=true;target=null;pointer=null;roomPositions.clear();cameraY=state.room*H;
   route=[];routeGoal=null;pendingInteraction=null;heldDirections.clear();
   visual={water:state.flags.drained?0:1,power:state.flags.generator?1:0,shutters:[0,0,0,0].map(()=>state.flags.shutters?1:0),crank:0,wheel:0,pulse:null};
+  syncCompanion();
   $('startScreen').hidden=true;$('app').hidden=false;rebuildScene();resize();updateUI();save();
-  discoverRoom();
   if (!state.muted) setAudio();
-  if (!continueSave) instructions(); else if(state.flags.finished) toast('Welcome back. The beacon is still burning.');
+  discoverRoom();
+  if (!continueSave) instructions(); else if(state.flags.finished) toast('Journey complete. You and Elian made it home. Explore freely.');else if(state.flags.beaconLit)toast('Elian is beside you. Continue upward to the Broken Dome and its upper exit.',7000);
 }
 function confirmNew() {
   shell('BEGIN AGAIN', 'Start a new descent?', '<p class="dialog-copy">This replaces your saved journey, including collected notes and solved mechanisms.</p>', '<button class="secondary" data-close>Keep my journey</button><button class="primary danger" id="confirmNew">Start again <span>↓</span></button>');
@@ -319,6 +338,7 @@ function followPointer(event){
   if(!target||Math.hypot(target.x-p.x,target.y-p.y)>2){target={...pointer};pendingInteraction=null;}
 }
 function objectUnder(p){return ROOMS[state.room].objects.find(o=>Math.abs(p.x-o.x)<o.w/2+7&&Math.abs(p.y-o.y)<o.h/2+7);}
+function objectLabel(o){return o.id==='elian'&&state.flags.beaconLit?'Elian’s resting place':o.id==='surfaceExit'&&state.flags.beaconLit?'Way to the surface':o.label;}
 canvas.addEventListener('pointermove',e=>{
   if(activeInstrument){if(!dialog.open&&instrumentDrag){const p=point(e);if(p.room===activeInstrument.room)moveInstrumentDrag(p);}return;}
   if(adjustingLight){
@@ -348,7 +368,7 @@ function endLightDrag(e){if(e.type==='pointerup')finishInstrumentDrag();else ins
 canvas.addEventListener('pointerup',endLightDrag);
 canvas.addEventListener('pointercancel',endLightDrag);
 canvas.addEventListener('lostpointercapture',()=>{lightDrag=null;instrumentDrag=null;});
-canvas.addEventListener('click',e=>{if(suppressCanvasClick){suppressCanvasClick=false;return;}if(!running||dialog.open||busy||adjustingLight||activeInstrument)return;const p=point(e);if(p.room!==state.room)return;const o=objectUnder(p);if(o){if(Math.hypot(o.x-state.player.x,o.y-state.player.y)<=42)interact(o);else{target={x:o.x,y:o.y};routeGoal=null;pendingInteraction={room:state.room,object:o};toast('Walking to '+o.label.toLowerCase()+'…',1600);}}});
+canvas.addEventListener('click',e=>{if(suppressCanvasClick){suppressCanvasClick=false;return;}if(!running||dialog.open||busy||adjustingLight||activeInstrument)return;const p=point(e);if(p.room!==state.room)return;const o=objectUnder(p);if(o){if(Math.hypot(o.x-state.player.x,o.y-state.player.y)<=42)interact(o);else{target={x:o.x,y:o.y};routeGoal=null;pendingInteraction={room:state.room,object:o};toast('Walking to '+objectLabel(o).toLowerCase()+'…',1600);}}});
 document.addEventListener('wheel',e=>{if(!running||dialog.open||e.ctrlKey||e.target.closest('#pinnedClue'))return;e.preventDefault();scrollDungeon(wheelDistance(e.deltaY,e.deltaMode,view));},{passive:false});
 document.addEventListener('keydown',e=>{
   if(!running||dialog.open)return;
@@ -406,7 +426,7 @@ function setAudio(){
 function chime(quiet=0){if(state.muted||!audio)return;const {context,master}=audio;const osc=context.createOscillator(),gain=context.createGain();osc.type='sine';osc.frequency.value=quiet?440:659.25;gain.gain.setValueAtTime(0,context.currentTime);gain.gain.linearRampToValueAtTime(quiet?.025:.05,context.currentTime+.01);gain.gain.exponentialRampToValueAtTime(.001,context.currentTime+.35);osc.connect(gain).connect(master);osc.start();osc.stop(context.currentTime+.4);}
 function soundCue(kind){
   if(state.muted||!audio)return;
-  const notes=kind==='knock'?[220,220,220]:kind==='wrong'?[145,130]:kind==='key'||kind==='prism'?[523.25,783.99,1046.5]:kind==='drained'||kind==='generator'?[110,164.81,220]:[329.63,493.88,659.25];
+  const notes=kind==='beaconLit'?[220,329.63,440,659.25]:kind==='knock'?[220,220,220]:kind==='wrong'?[145,130]:kind==='key'||kind==='prism'?[523.25,783.99,1046.5]:kind==='drained'||kind==='generator'?[110,164.81,220]:[329.63,493.88,659.25];
   const {context,master}=audio;
   notes.forEach((frequency,i)=>{const start=context.currentTime+i*(kind==='knock'?.32:.08),osc=context.createOscillator(),gain=context.createGain();osc.type=kind==='drained'?'triangle':'sine';osc.frequency.value=frequency;gain.gain.setValueAtTime(0,start);gain.gain.linearRampToValueAtTime(.035,start+.015);gain.gain.exponentialRampToValueAtTime(.001,start+.5);osc.connect(gain).connect(master);osc.start(start);osc.stop(start+.55);});
 }
@@ -433,6 +453,8 @@ function tick(time){
     }
   }
   if(running){
+    if(companion&&!dialog.open&&!busy)advanceCompanion(companion,state.player,dt,time/1000);
+    visual.companion=companion;visual.rescueProgress=state.flags.beaconLit?(reduced||signalStartedAt===null?1:Math.min(1,(time/1000-signalStartedAt)/2.4)):0;
     const approach=(current,goal,speed)=>reduced?goal:current+Math.max(-speed*dt,Math.min(speed*dt,goal-current));
     visual.water=approach(visual.water,state.flags.drained?0:1,.75);visual.power=approach(visual.power,state.flags.generator?1:0,1.5);
     visual.wheel+=reduced?0:dt*visual.power*2.5;
@@ -450,9 +472,10 @@ function tick(time){
     }
     drawLightPath(ctx,view,cameraY,state,lightAim,adjustingLight);
     if(adjustingLight)updateLightControls();
-    if(!dialog.open&&!busy&&pointer&&time>scrollingUntil){const o=objectUnder(pointer);if(o){const p=worldToScreen(o.x,state.room*H+o.y-o.h/2-10,view,cameraY);$('hoverLabel').hidden=false;$('hoverLabel').innerHTML=`${o.label}<small>${Math.hypot(o.x-state.player.x,o.y-state.player.y)<=42?'CLICK TO INVESTIGATE':'CLICK TO APPROACH'}</small>`;$('hoverLabel').style.left=`${Math.max(120,Math.min(view.width-120,p.x))}px`;$('hoverLabel').style.top=`${Math.max(45,p.y)}px`;}else $('hoverLabel').hidden=true;}else $('hoverLabel').hidden=true;
+    if(!dialog.open&&!busy&&pointer&&time>scrollingUntil){const o=objectUnder(pointer);if(o){const p=worldToScreen(o.x,state.room*H+o.y-o.h/2-10,view,cameraY);$('hoverLabel').hidden=false;$('hoverLabel').innerHTML=`${objectLabel(o)}<small>${Math.hypot(o.x-state.player.x,o.y-state.player.y)<=42?'CLICK TO INVESTIGATE':'CLICK TO APPROACH'}</small>`;$('hoverLabel').style.left=`${Math.max(120,Math.min(view.width-120,p.x))}px`;$('hoverLabel').style.top=`${Math.max(45,p.y)}px`;}else $('hoverLabel').hidden=true;}else $('hoverLabel').hidden=true;
     $('travelPrompt').hidden=dialog.open;
     $('travelPrompt').textContent=cameraY<1?(lastUnlocked(state)>0?'SCROLL DOWN ↓ · THE DESCENT CONTINUES':'↓ SOLVE THE SEAL TO GO DEEPER'):cameraY>=lastUnlocked(state)*H-1?'↑ SCROLL UP TO REVISIT EARLIER ROOMS':'↑ RETURN · SCROLL TO EXPLORE · DESCEND ↓';
+    if(state.flags.beaconLit)$('travelPrompt').textContent=state.flags.finished?'JOURNEY COMPLETE · EXPLORE FREELY':state.room===0?'THE WAY OUT IS OPEN · CLICK THE UPPER GATE ↑':'↑ RETURN TO THE DOME · ELIAN IS WITH YOU';
     $('scrollMarker').style.top=`${cameraY/(H*4)*100}%`;
     if(time-saveTime>1500&&moved){save();saveTime=time;}
   }
@@ -460,5 +483,5 @@ function tick(time){
 }
 for(const name of ['dome','archive','pump','lens','beacon','explorer']){const image=new Image();image.src=`./assets/${name}.webp`;image.onload=()=>{images[name]=image;if(running)rebuildScene();};}
 // Read-only observability helps verify movement and progression without adding cheat controls.
-Object.defineProperty(window,'observatory',{value:Object.freeze({get state(){return structuredClone(state);},get running(){return running;},get camera(){return{scrollY:cameraY,...view};},get light(){return{adjusting:adjustingLight,aim:lightAim};},get instrument(){return activeInstrument?.type??null;},get effects(){return{water:visual.water,power:visual.power,shutters:[...visual.shutters]};}})});
+Object.defineProperty(window,'observatory',{value:Object.freeze({get state(){return structuredClone(state);},get running(){return running;},get camera(){return{scrollY:cameraY,...view};},get light(){return{adjusting:adjustingLight,aim:lightAim};},get instrument(){return activeInstrument?.type??null;},get companion(){return companion?{room:companion.room,x:companion.x,y:companion.y,moving:companion.moving}:null;},get effects(){return{water:visual.water,power:visual.power,shutters:[...visual.shutters],signal:visual.rescueProgress??0};}})});
 updateUI();requestAnimationFrame(tick);

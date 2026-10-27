@@ -113,9 +113,16 @@ function drawObject(c,o,s,t,near,visual){
     rect(c,-25,-15,50,30,'#5e5f4b');for(let i=0;i<4;i++){const opened=visual.shutters[i];rect(c,-22+i*12,-12,10,23,s.flags.beamAligned?'#b9b884':'#142b32');rect(c,-22+i*12,-12,10,Math.max(1,23*(1-opened)),'#263d3c');line(c,-21+i*12,-10+opened*4,-14+i*12,-10+opened*4,'#b7a16b');rect(c,-21+i*12,13,8,4,'#746e52');c.fillStyle='#e6d8aa';c.font='7px monospace';c.textAlign='center';c.fillText(String(i+1),-17+i*12,19);}
   }else if(kind==='satchel'){
     rect(c,-9,-6,18,13,'#6f5540');rect(c,-9,-6,18,4,'#927051');rect(c,-2,-3,4,8,'#b29861');line(c,-7,-6,-4,-10,'#8b7755');
+  }else if(kind==='exit'){
+    rect(c,-16,-12,32,24,'#43524a');rect(c,-12,-10,24,22,s.flags.beaconLit?'#dcd1a0':'#12232b');
+    if(s.flags.beaconLit){glow(c,0,-5,55,'#f4dd9b55');for(let i=0;i<3;i++)rect(c,-12,5+i*3,24,1,'#91866b');symbol(c,'star',0,-5,5,'#fff2c8');}
+    else for(let i=-8;i<=8;i+=8)rect(c,i,-10,2,22,'#9b885c');
   }else if(kind==='beacon'){
-    circle(c,0,8,22,'#958558',4);circle(c,0,4,16,'#c9ae77',2);rect(c,-8,-19,16,30,'#7f7656');rect(c,-14,-17,28,5,'#b8a26a');rect(c,-12,-12,24,18,'#a9b79a');rect(c,-9,-10,18,14,s.flags.finished?'#fff1b6':'#d7cc94');line(c,0,-12,0,7,'#e3d6a5');circle(c,0,-3,15,'#ccae76',2);glow(c,0,-5,s.flags.finished?100:35,s.flags.finished?'#f3c77360':'#e5c06d25');
-  }else if(kind==='mentor'){drawExplorer(c,0,2,t,false,'#7e7760');}
+    circle(c,0,8,22,'#958558',4);circle(c,0,4,16,'#c9ae77',2);rect(c,-8,-19,16,30,'#7f7656');rect(c,-14,-17,28,5,'#b8a26a');rect(c,-12,-12,24,18,'#a9b79a');rect(c,-9,-10,18,14,s.flags.beaconLit?'#fff1b6':'#d7cc94');line(c,0,-12,0,7,'#e3d6a5');circle(c,0,-3,15,'#ccae76',2);glow(c,0,-5,s.flags.beaconLit?35+65*(visual.rescueProgress??1):35,s.flags.beaconLit?'#f3c77360':'#e5c06d25');
+  }else if(kind==='mentor'){
+    if(s.flags.beaconLit){rect(c,-8,-10,16,20,'#3d4135');rect(c,-6,-8,12,14,'#85806a');for(let i=0;i<3;i++)line(c,-5,-5+i*4,5,-5+i*4,'#aba184');}
+    else drawExplorer(c,0,2,t,false,'#7e7760');
+  }
   if(near){c.strokeStyle='#e2c687';c.lineWidth=1;const xx=-o.w/2-4,yy=-o.h/2-5,ww=o.w+8,hh=o.h+10;for(const [a,b,dx,dy]of [[xx,yy,1,1],[xx+ww,yy,-1,1],[xx,yy+hh,1,-1],[xx+ww,yy+hh,-1,-1]]){line(c,a,b,a+dx*4,b,'#e2c687');line(c,a,b,a,b+dy*4,'#e2c687');}}
   c.restore();
 }
@@ -128,9 +135,15 @@ export function drawFrame(c,scene,s,t,near,target,moving,images,reduced,showExpl
   c.clearRect(0,0,W,H);c.drawImage(scene,0,0);
   const open=s.room<lastUnlocked(s);
   // Open stair shafts meet the adjacent room when the camera passes between them.
-  for(const [from,to,on] of [[0,46,s.room>0],[282,320,open]])if(on){rect(c,222,from,36,to-from,'#1c3035');rect(c,217,from,5,to-from,'#31474a');rect(c,258,from,5,to-from,'#253a40');for(let y=from;y<to;y+=8){rect(c,223,y,34,1,'#62726c');rect(c,223,y+2,34,1,'#11262c');}}
+  for(const [from,to,on] of [[0,46,s.room>0||s.flags.beaconLit],[282,320,open]])if(on){rect(c,222,from,36,to-from,'#1c3035');rect(c,217,from,5,to-from,'#31474a');rect(c,258,from,5,to-from,'#253a40');for(let y=from;y<to;y+=8){rect(c,223,y,34,1,'#62726c');rect(c,223,y+2,34,1,'#11262c');}}
   // The stairs are travel points, not holes that can teleport the explorer.
-  for(const [yy,up]of [[46,true],[273,false]]){rect(c,222,yy-8,36,17,'#12242a');for(let i=0;i<5;i++){const y=yy-7+i*4;rect(c,223,y,34,2,up?'#697775':'#5b6b66');rect(c,223,y+2,34,1,'#1b2f34');}if((up&&s.room===0)||(!up&&!open)){rect(c,222,yy-8,36,18,'#142228b0');for(let i=0;i<5;i++)rect(c,225+i*7,yy-8,2,18,'#8b7b56');}else{line(c,235,yy+(up?3:-3),240,yy+(up?-2:2),'#bdad7b');line(c,240,yy+(up?-2:2),245,yy+(up?3:-3),'#bdad7b');}}
+  for(const [yy,up]of [[46,true],[273,false]]){rect(c,222,yy-8,36,17,'#12242a');for(let i=0;i<5;i++){const y=yy-7+i*4;rect(c,223,y,34,2,up?'#697775':'#5b6b66');rect(c,223,y+2,34,1,'#1b2f34');}if((up&&s.room===0&&!s.flags.beaconLit)||(!up&&!open)){rect(c,222,yy-8,36,18,'#142228b0');for(let i=0;i<5;i++)rect(c,225+i*7,yy-8,2,18,'#8b7b56');}else{line(c,235,yy+(up?3:-3),240,yy+(up?-2:2),'#bdad7b');line(c,240,yy+(up?-2:2),245,yy+(up?3:-3),'#bdad7b');}}
+  if(s.flags.beaconLit){
+    rect(c,42,47,396,232,'#bc92320d');
+    const progress=visual.rescueProgress??1,top=4*H+169-(4*H+169-15)*progress-s.room*H,bottom=s.room===4?169:H;
+    if(top<=bottom){const start=Math.max(0,top);rect(c,236,start,8,bottom-start,'#f1ce7720');rect(c,239,start,2,bottom-start,'#f4dfaa99');glow(c,240,Math.max(start,150),100,'#f0bd4f13');}
+    if(s.room===0&&progress>=1)symbol(c,'star',240,17,6,'#fff0bb');
+  }
   if(s.room===0&&s.flags.projector){glow(c,370,112,50,'#e5c66f22');line(c,370,112,330,258,'#eddb9850',2);}
   if(s.room===1&&s.flags.beamAligned){glow(c,370,100,47,'#f4d8953a');}
   if(s.room===2){
@@ -145,10 +158,15 @@ export function drawFrame(c,scene,s,t,near,target,moving,images,reduced,showExpl
   }
   if(s.room===3){for(let i=0;i<3;i++){const on=[s.flags.beamAligned,s.flags.generator,s.flags.shutters][i];rect(c,223+i*15,244,5,3,on?'#c4ce98':'#4d5a50');}}
   const objects=ROOMS[s.room].objects;
-  const behind=objects.filter(o=>o.y<=s.player.y),front=objects.filter(o=>o.y>s.player.y);
-  for(const o of behind)drawObject(c,o,s,t,near?.id===o.id,visual);
-  if(showExplorer){glow(c,s.player.x+6,s.player.y,39,'#e5be6221');drawExplorer(c,s.player.x,s.player.y,t,moving,'#416661',images.explorer);}
-  for(const o of front)drawObject(c,o,s,t,near?.id===o.id,visual);
+  const entities=objects.map(object=>({y:object.y,object}));
+  if(showExplorer)entities.push({y:s.player.y,explorer:true});
+  if(visual.companion?.room===s.room)entities.push({y:visual.companion.y,companion:visual.companion});
+  entities.sort((a,b)=>a.y-b.y);
+  for(const entity of entities){
+    if(entity.object)drawObject(c,entity.object,s,t,near?.id===entity.object.id,visual);
+    else if(entity.explorer){glow(c,s.player.x+6,s.player.y,39,'#e5be6221');drawExplorer(c,s.player.x,s.player.y,t,moving,'#416661',images.explorer);}
+    else{const p=entity.companion;glow(c,p.x+6,p.y,24,'#e5be6218');drawExplorer(c,p.x,p.y,t,p.moving,'#8a7857');c.fillStyle='#d9d1b5';c.font='6px monospace';c.textAlign='center';c.fillText('Elian',p.x,p.y-21);}
+  }
   if(visual.pulse?.room===s.room){const age=t-visual.pulse.started;if(age>=0&&age<.5){c.save();c.globalAlpha=1-age*2;circle(c,visual.pulse.x,visual.pulse.y,reduced?19:12+age*38,'#e5c989',1);glow(c,visual.pulse.x,visual.pulse.y,30,'#f2d08d44');c.restore();}}
   const vignette=c.createRadialGradient(240,165,95,240,165,285);vignette.addColorStop(0,'transparent');vignette.addColorStop(1,'#020c119a');c.fillStyle=vignette;c.fillRect(0,0,W,H);
   // A small targeting diamond keeps the mouse legible when a wall blocks the explorer.

@@ -18,9 +18,10 @@ export const NOTES = {
   reunion: { title: 'What the observatory was for', room: 'Buried Beacon', text: 'Elian is alive. The buried lens was built to send a signal through the mountain: a way home for anyone lost in the dark. The stars on its walls were instructions, not observations.' }
 };
 export function freshState() {
-  return { version: 1, room: 0, player: { x: 240, y: 86 }, flags: { archive: false, key: false, pump: false, drained: false, prism: false, projector: false, beamAligned: false, generator: false, shutters: false, finished: false }, journal: ['letter'], pinnedNote:null, hints: {}, instruments:freshInstruments(), muted: true };
+  return { version: 1, room: 0, player: { x: 240, y: 86 }, flags: { archive: false, key: false, pump: false, drained: false, prism: false, projector: false, beamAligned: false, generator: false, shutters: false, beaconLit:false, finished: false }, journal: ['letter'], pinnedNote:null, hints: {}, instruments:freshInstruments(), muted: true };
 }
 export function lastUnlocked(s) {
+  if(s.flags.beaconLit)return 4;
   if (s.flags.projector && s.flags.beamAligned && s.flags.generator && s.flags.shutters) return 4;
   if (s.flags.drained) return 3;
   if (s.flags.pump) return 2;
@@ -40,12 +41,16 @@ export function restoreState(raw) {
     // Older saves already past the projection keep their solved light path.
     if (!Object.hasOwn(data.flags, 'beamAligned') && s.flags.projector && (data.journal.includes('projection') || s.flags.shutters || s.flags.finished)) s.flags.beamAligned = true;
     if (!s.flags.projector) s.flags.beamAligned = false;
-    if (lastUnlocked(s) < 4) s.flags.finished = false;
+    const finalReady=s.flags.projector&&s.flags.beamAligned&&s.flags.generator&&s.flags.shutters;
+    if(!finalReady)s.flags.beaconLit=s.flags.finished=false;
+    // Before beaconLit existed, finished meant the rescue was already complete.
+    if(s.flags.finished)s.flags.beaconLit=true;
     s.room = Math.max(0, Math.min(lastUnlocked(s), Number.isInteger(data.room) ? data.room : 0));
     if (data.player && Number.isFinite(data.player.x) && Number.isFinite(data.player.y)) {
       s.player = { x: Math.max(46, Math.min(434, data.player.x)), y: Math.max(48, Math.min(278, data.player.y)) };
     }
     s.journal = [...new Set(['letter', ...data.journal.filter(k => Object.hasOwn(NOTES, k))])];
+    if(s.flags.beaconLit&&!s.journal.includes('reunion'))s.journal.push('reunion');
     s.pinnedNote=typeof data.pinnedNote==='string'&&s.journal.includes(data.pinnedNote)?data.pinnedNote:null;
     s.muted = data.muted !== false;
     s.instruments=restoreInstruments(data.instruments);
@@ -81,7 +86,7 @@ export function applyAction(original, action) {
     s.flags.beamAligned = true; note('light');
     return finish(true, 'The brass catch clicks. Light fills the Archive receiver, revealing silver writing on the wall below.');
   }
-  const rooms = { inspect_mural: 0, inspect_satchel:0, solve_entry: 0, restore_projector: 0, take_key: 1, inspect_reflection: 1, inspect_mentor: 1, inspect_wall: 1, unlock_pump: 1, inspect_plaque: 2, solve_pump: 2, route_generator: 2, collect_prism: 3, inspect_diagram:3, solve_shutters: 3, meet_mentor: 4, finish: 4 };
+  const rooms = { inspect_mural: 0, inspect_satchel:0, escape:0, solve_entry: 0, restore_projector: 0, take_key: 1, inspect_reflection: 1, inspect_mentor: 1, inspect_wall: 1, unlock_pump: 1, inspect_plaque: 2, solve_pump: 2, route_generator: 2, collect_prism: 3, inspect_diagram:3, solve_shutters: 3, meet_mentor: 4, finish: 4 };
   if (!(action.type in rooms) || s.room !== rooms[action.type]) return finish(false, 'You need to be beside the mechanism to use it.');
   switch (action.type) {
     case 'inspect_mural': note('mural'); return finish(true, NOTES.mural.text);
@@ -106,6 +111,7 @@ export function applyAction(original, action) {
       s.flags.drained = true; return finish(true, 'The water recedes. The sluice latches open, revealing stairs to the Lens Chamber.');
     case 'route_generator':
       if (!s.flags.drained) return finish(false, 'Drain the lower chamber before routing water to the turbine.');
+      if(s.flags.beaconLit)return finish(false,'The routing lever is latched to the turbine. Keep the beacon burning while you and Elian return to the surface.');
       s.flags.generator = !s.flags.generator; return finish(true, s.flags.generator ? 'Water turns the turbine. Power flows to the buried beacon. The drain remains latched.' : 'Water returns to the bypass. The beacon turbine slows; the drain remains latched.');
     case 'collect_prism': s.flags.prism = true; note('prism'); return finish(true, 'The projection prism is yours. Its brass foot looks familiar.');
     case 'restore_projector':
@@ -117,11 +123,16 @@ export function applyAction(original, action) {
     case 'meet_mentor': note('reunion'); return finish(true, '“You found me.” Elian smiles in the lantern light. “They built this to bring people home. Will you help me send the signal?”');
     case 'finish':
       if (lastUnlocked(s) !== 4) return finish(false, 'The beacon needs light, water, and aligned shutters.');
-      note('reunion'); s.flags.finished = true; return finish(true, 'A column of warm light climbs through the mountain. Far above, a light answers. You are going home.');
+      if(!s.journal.includes('reunion'))return finish(false,'Elian is beside the eastern wall. Speak with him before sending the signal.');
+      s.flags.beaconLit=true;return finish(true,'A light answers above. Elian is coming with you. Return to the Broken Dome and leave through its upper exit.');
+    case 'escape':
+      if(!s.flags.beaconLit)return finish(false,'The upper gate is held by the observatory’s unlit signal catch. Find Elian and restore the beacon below.');
+      s.flags.finished=true;return finish(true,'You and Elian made it home.');
   }
 }
 export function objective(s) {
-  if (s.flags.finished) return 'A light answered. You are going home.';
+  if (s.flags.finished) return 'Journey complete. You and Elian made it home.';
+  if(s.flags.beaconLit)return 'Return to the Broken Dome with Elian. Leave through the upper exit.';
   if (!s.flags.archive) return 'Find a way through the first celestial seal.';
   if (!s.flags.pump) return 'Search the Archive for a route farther down.';
   if (!s.flags.drained) return 'Work out how the lower instruments read the sky.';
@@ -131,11 +142,13 @@ export function objective(s) {
   if (!s.journal.includes('projection')) return 'Follow the restored beam. What has changed?';
   if (!s.flags.shutters) return 'Use the hidden instructions to align the shutters.';
   if (!s.flags.generator) return 'The final seal needs a steady source of power.';
-  return 'Reach Elian and send the beacon’s signal.';
+  return s.journal.includes('reunion')?'Help Elian light the beacon.':'Find Elian beside the beacon and speak with him.';
 }
 export function hint(s) {
   let key, steps;
-  if (!s.flags.archive) { key = 'entry'; steps = ['The first door remembers something carved in this room.', 'Read the mural at the upper-left wall. Its figures have an order.', 'Set the door dials to CRESCENT → STAR → SUN, then turn the seal.']; }
+  if(s.flags.finished){key='complete';steps=['You and Elian are safely outside.','You can revisit the observatory freely.','Begin a new descent from the menu to replay the journey.'];}
+  else if(s.flags.beaconLit){key='ascent';steps=['The answering light has opened a way back. Elian will follow you.','Scroll upward through the restored rooms to the Broken Dome.','In the Broken Dome, click the open gate at the top center to leave together.'];}
+  else if (!s.flags.archive) { key = 'entry'; steps = ['The first door remembers something carved in this room.', 'Read the mural at the upper-left wall. Its figures have an order.', 'Set the door dials to CRESCENT → STAR → SUN, then turn the seal.']; }
   else if (!s.flags.pump) { key = 'archive'; steps = ['Search the Archive’s desks and shelves.', 'The small brass key opens the southern maintenance lock. Read the memorandum before leaving.', 'Pick up the key from the right-hand desk, then use the lock at the southern stairs.']; }
   else if (!s.flags.drained) { key = 'drain'; steps = ['An earlier room explains how to read this instrument.', 'Combine the Dome’s procession with the Archive’s maintenance memorandum.', 'Reverse the mural order: SUN → STAR → CRESCENT. Turn the water regulator.']; }
   else if (!s.flags.prism) { key = 'prism'; steps = ['The drained chamber contains a portable part.', 'Examine the triangular lens housing in the Lens Chamber.', 'Collect the prism from the central lens housing.']; }
