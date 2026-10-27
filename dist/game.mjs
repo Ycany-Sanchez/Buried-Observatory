@@ -173,7 +173,7 @@ function commit(action) {
   return result;
 }
 function shell(eyebrow, title, body, footer = '') {
-  dialog.classList.remove('journal-dialog');
+  dialog.classList.remove('journal-dialog','ending-dialog');
   heldDirections.clear();pendingInteraction=null;
   target = null; moved = false; pointer = null; $('hoverLabel').hidden = true;
   $('dialogContent').innerHTML = `<div class="dialog-inner"><div class="dialog-top"><p class="eyebrow">${eyebrow}</p><button class="close-button" data-close aria-label="Close dialog">×</button></div><h2 id="dialogTitle">${title}</h2>${body}${footer ? `<div class="dialog-bottom">${footer}</div>` : ''}</div>`;
@@ -294,8 +294,8 @@ function interact(o) {
   description(o.label,r.message);
 }
 function ending() {
-  shell('JOURNEY COMPLETE', 'You and Elian made it home.', `${clueSketch('reunion')}<p class="dialog-copy">Cool morning air replaces the dust.<br>Behind you, the mountain holds a little light.<br><br>Elian looks back at the open gate.<br>“A way home. All this time.”</p>`, '<button class="secondary" id="endingDone">Revisit the observatory</button><button class="primary" id="endingNew">Begin a new descent</button>');
-  $('dialogContent').firstElementChild.classList.add('ending');$('endingDone').onclick=()=>dialog.close();$('endingNew').onclick=confirmNew;
+  shell('JOURNEY COMPLETE', 'You and Elian made it home.', `<div class="ending-story">${clueSketch('reunion')}<p class="dialog-copy">Cool morning air replaces the dust.<br>Behind you, the mountain holds a little light.<br><br>Elian looks back at the open gate.<br>“A way home. All this time.”</p></div>`, '<button class="secondary" id="endingDone">Revisit the observatory</button><button class="primary" id="endingNew">Begin a new descent</button>');
+  dialog.classList.add('ending-dialog');$('dialogContent').firstElementChild.classList.add('ending');$('endingDone').onclick=()=>dialog.close();$('endingNew').onclick=confirmNew;
 }
 function beginAscent(message){
   leaveLight();leaveInstrument();heldDirections.clear();target=null;pointer=null;signalStartedAt=performance.now()/1000;syncCompanion();toast(message,9000);
@@ -373,17 +373,15 @@ document.addEventListener('wheel',e=>{if(!running||dialog.open||e.ctrlKey||e.tar
 document.addEventListener('keydown',e=>{
   if(!running||dialog.open)return;
   const k=e.key.toLowerCase();
+  if(k==='enter'&&e.target.closest('button,a'))return;
   if(activeInstrument){
     if(k==='escape'){e.preventDefault();leaveInstrument();canvas.focus({preventScroll:true});return;}
-    if(k==='enter'&&e.target.closest('button'))return;
     if(/^[1-4]$/.test(k)){e.preventDefault();const n=Number(k);if(activeInstrument.type==='pump'){if(n<=3)turnInstrumentDial(n-1,1);}else liftShutter(n);return;}
     if(k==='enter'||k==='e'){e.preventDefault();attemptInstrument();return;}
     if(['arrowup','arrowdown','arrowleft','arrowright','w','a','s','d'].includes(k)){e.preventDefault();return;}
   }
   if(adjustingLight){
     if(k==='escape'){e.preventDefault();leaveLight();canvas.focus({preventScroll:true});return;}
-    // Native buttons retain their Enter/Space behavior when tabbed to.
-    if(k==='enter'&&e.target.closest('button'))return;
     if(k==='arrowleft'||k==='arrowright'){e.preventDefault();turnLight(k==='arrowleft'?-.05:.05);return;}
     if(k==='arrowup'||k==='arrowdown'||k==='pageup'||k==='pagedown'){e.preventDefault();scrollDungeon(k==='arrowup'||k==='pageup'?-32:32);return;}
     if(k==='enter'||k==='e'){e.preventDefault();lockLight();return;}
@@ -454,7 +452,7 @@ function tick(time){
   }
   if(running){
     if(companion&&!dialog.open&&!busy)advanceCompanion(companion,state.player,dt,time/1000);
-    visual.companion=companion;visual.rescueProgress=state.flags.beaconLit?(reduced||signalStartedAt===null?1:Math.min(1,(time/1000-signalStartedAt)/2.4)):0;
+    visual.companion=companion;visual.rescueProgress=state.flags.beaconLit?(reduced||signalStartedAt===null?1:Math.max(0,Math.min(1,(time/1000-signalStartedAt)/2.4))):0;
     const approach=(current,goal,speed)=>reduced?goal:current+Math.max(-speed*dt,Math.min(speed*dt,goal-current));
     visual.water=approach(visual.water,state.flags.drained?0:1,.75);visual.power=approach(visual.power,state.flags.generator?1:0,1.5);
     visual.wheel+=reduced?0:dt*visual.power*2.5;

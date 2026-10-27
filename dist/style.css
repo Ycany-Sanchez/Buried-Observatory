@@ -130,3 +130,8 @@ dialog.journal-dialog{width:min(900px,calc(100% - 32px))}
   .aiming-light .pinned-clue,.operating-instrument .pinned-clue{top:64px}
 }
 @media(max-height:600px){.pinned-clue{top:64px}}
+.ending-dialog .dialog-inner{display:flex;flex-direction:column;max-height:85svh;overflow:hidden}
+.ending-dialog .dialog-top,.ending-dialog h2,.ending-dialog .dialog-bottom{flex-shrink:0}
+.ending-story{min-height:0;overflow:auto;scrollbar-color:var(--dim) var(--panel)}
+.ending .dialog-bottom{margin-top:16px;padding-top:16px;gap:10px;flex-wrap:wrap}
+.ending .dialog-bottom>button{min-height:44px}

@@ -63,7 +63,12 @@ try{
     assert.deepEqual(await evaluate('window.observatory.state.instruments.pump'),draft);await screenshot('19-pinned-clue-phone');
     await send('Page.reload');await sleep(700);await click('#continueButton');
     assert.equal(await evaluate('window.observatory.state.pinnedNote'),'plaque');assert.deepEqual(await evaluate('window.observatory.state.instruments.pump'),draft);
-    await click('#unpinNote');assert.equal(await evaluate('window.observatory.state.pinnedNote'),null);
+    await evaluate('document.querySelector("#readPinned").focus()');assert.equal(await evaluate('document.activeElement.id'),'readPinned');
+    await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,nativeVirtualKeyCode:13,text:'\r'});await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,nativeVirtualKeyCode:13});await sleep(100);
+    assert.equal(await evaluate('document.querySelector("#dialog").open'),true,'Enter opens a focused pinned reference during exploration');await click('#noteDone');
+    await evaluate('document.querySelector("#unpinNote").focus()');
+    await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,nativeVirtualKeyCode:13,text:'\r'});await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,nativeVirtualKeyCode:13});await sleep(100);
+    assert.equal(await evaluate('window.observatory.state.pinnedNote'),null,'Enter activates the focused unpin button');
     await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});await sleep(150);
     console.log('PASS illustrated journal, replacing/unpinning clues, phone reference, drafts and saved pin');
   }
@@ -86,6 +91,7 @@ try{
     await send('Emulation.setDeviceMetricsOverride',{width:390,height:568,deviceScaleFactor:1,mobile:true});await sleep(150);await ascend();await ascend();assert.equal(await evaluate('window.observatory.state.room'),0);
     await screenshot('22-dome-exit-phone');await tap(240,52);await until('window.observatory.state.flags.finished','The upper gate did not complete the rescue');
     assert.equal(await evaluate('window.observatory.companion'),null);assert.ok((await evaluate('document.querySelector("#dialogTitle").textContent')).includes('made it home'));await screenshot('23-rescue-complete');
+    assert.equal(await evaluate('["endingDone","endingNew"].every(id=>{const r=document.getElementById(id).getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight})'),true,'Both completion choices remain visible on a short phone');
     await click('#endingDone');await send('Page.reload');await sleep(700);await click('#continueButton');assert.equal(await evaluate('window.observatory.state.flags.finished'),true);
     await evaluate("(()=>{const s=window.observatory.state;delete s.flags.beaconLit;s.room=4;localStorage.setItem('buried-observatory:v1',JSON.stringify(s));location.reload()})()");await sleep(700);await click('#continueButton');
     assert.equal(await evaluate('window.observatory.state.flags.beaconLit'),true);assert.equal(await evaluate('window.observatory.state.flags.finished'),true);assert.equal(await evaluate('window.observatory.companion'),null);
