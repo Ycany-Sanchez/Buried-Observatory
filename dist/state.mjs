@@ -1,4 +1,5 @@
 import { lightAligned } from './light.mjs';
+import { freshInstruments, restoreInstruments } from './instruments.mjs';
 export const SAVE_KEY = 'buried-observatory:v1';
 export const SYMBOLS = ['crescent', 'star', 'sun'];
 export const ROOM_NAMES = ['Broken Dome', 'The Archive', 'Pump Room', 'Lens Chamber', 'Buried Beacon'];
@@ -14,7 +15,7 @@ export const NOTES = {
   reunion: { title: 'What the observatory was for', room: 'Buried Beacon', text: 'Elian is alive. The buried lens was built to send a signal through the mountain: a way home for anyone lost in the dark. The stars on its walls were instructions, not observations.' }
 };
 export function freshState() {
-  return { version: 1, room: 0, player: { x: 240, y: 86 }, flags: { archive: false, key: false, pump: false, drained: false, prism: false, projector: false, beamAligned: false, generator: false, shutters: false, finished: false }, journal: ['letter'], hints: {}, muted: true };
+  return { version: 1, room: 0, player: { x: 240, y: 86 }, flags: { archive: false, key: false, pump: false, drained: false, prism: false, projector: false, beamAligned: false, generator: false, shutters: false, finished: false }, journal: ['letter'], hints: {}, instruments:freshInstruments(), muted: true };
 }
 export function lastUnlocked(s) {
   if (s.flags.projector && s.flags.beamAligned && s.flags.generator && s.flags.shutters) return 4;
@@ -43,6 +44,7 @@ export function restoreState(raw) {
     }
     s.journal = [...new Set(['letter', ...data.journal.filter(k => Object.hasOwn(NOTES, k))])];
     s.muted = data.muted !== false;
+    s.instruments=restoreInstruments(data.instruments);
     if (data.hints && typeof data.hints === 'object') for (const [k, v] of Object.entries(data.hints)) if (Number.isInteger(v) && v >= 0 && v <= 3) s.hints[k] = v;
     return s;
   } catch { return freshState(); }

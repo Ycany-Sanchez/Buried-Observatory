@@ -64,6 +64,21 @@ dialog{z-index:20}
 .light-controls>small{display:block;font:8px/1.8 var(--mono);color:var(--muted);margin-top:10px}
 .aiming-light .room-heading,.aiming-light .controls-strip,.aiming-light .travel-prompt{visibility:hidden}
 .aiming-light .stage canvas{cursor:crosshair}
+.operating-instrument .room-heading,.operating-instrument .controls-strip,.operating-instrument .travel-prompt{visibility:hidden}
+.operating-instrument .stage canvas{cursor:pointer}
+.mechanism-controls{width:350px;max-height:calc(100svh - 100px);overflow:auto}
+.mechanism-controls h2{font:400 25px/1.1 var(--serif);margin:8px 0 12px}
+.instrument-dials,.instrument-tabs{display:flex;gap:8px;margin:14px 0}
+.instrument-dials .dial{width:calc((100% - 16px)/3);height:74px;gap:6px}
+.instrument-dials .symbol{font-size:27px}
+.instrument-dials small{text-transform:uppercase;font-size:8px}
+.instrument-tabs .shutter{width:calc((100% - 24px)/4);height:51px;font-size:24px}
+.instrument-actions{display:flex;gap:7px}
+.instrument-actions>.primary{margin-left:auto}
+.mechanism-controls .sequence-readout{font-size:14px;min-height:18px;letter-spacing:3px}
+.mechanism-controls .light-status{min-height:0}
+.mechanism-controls .primary,.mechanism-controls .secondary{padding:9px 12px}
+@media(max-width:480px) and (max-height:740px){.mechanism-controls h2,.mechanism-controls h2+p,.mechanism-controls>small{display:none}.instrument-dials,.instrument-tabs{margin:6px 0}.instrument-dials .dial{height:52px}.instrument-dials .symbol{font-size:20px}.instrument-tabs .shutter{height:38px}.mechanism-controls{max-height:210px}}
 @media(max-width:480px){.light-controls{left:18px;bottom:48px;padding:12px}.light-controls p{font-size:11px}.light-controls>small{font-size:7px}}
 @media(max-width:480px) and (max-height:740px){.light-controls-heading+p,.light-controls>small{display:none}.light-controls .light-status{min-height:0}}
 @media(max-height:540px) and (min-width:481px){.light-controls{left:18px;bottom:16px;width:44vw;padding:10px}.light-controls p{font-size:10px;margin:4px 0}.light-controls .light-status{min-height:0}.light-controls>small{display:none}.light-buttons{margin:6px 0}.light-controls .secondary,.light-controls .primary{min-height:32px;padding:6px;font-size:10px}}

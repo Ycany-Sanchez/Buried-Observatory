@@ -10,6 +10,7 @@ const chromeArgs=['--headless=new','--disable-gpu','--no-first-run','--no-defaul
 if(process.env.OBSERVATORY_QA_RESTRICTED==='1')chromeArgs.unshift('--no-sandbox');
 const chrome=spawn(process.env.OBSERVATORY_QA_CHROME||'C:/Program Files/Google/Chrome/Application/chrome.exe',chromeArgs,{stdio:['ignore','ignore','pipe'],windowsHide:true});
 const lightOnly=process.argv.includes('--light-only');
+const instrumentsOnly=process.argv.includes('--instruments-only'),reducedMotion=process.argv.includes('--reduced-motion');
 chrome.stderr.on('data',data=>console.error(String(data).slice(0,1000)));chrome.on('exit',(code)=>console.log('Browser exit '+code));
 let ws,id=0;const pending=new Map(),errors=[];const keepAlive=setInterval(()=>{},1000);
 try{
@@ -25,17 +26,72 @@ try{
   const click=async selector=>{await evaluate('document.fonts.ready.then(()=>true)');const p=await evaluate(`(()=>{const el=document.querySelector(${JSON.stringify(selector)});if(!el)throw Error('Missing ${selector}');el.scrollIntoView({block:'nearest'});const r=el.getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2}})()`);await send('Input.dispatchMouseEvent',{type:'mouseMoved',...p});await send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...p});await send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...p});await sleep(120);};
   const screenshot=async name=>{const r=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(path.join(output,name+'.png'),Buffer.from(r.data,'base64'));console.log('SCREENSHOT '+name);};
   await send('Runtime.enable');await send('Page.enable');await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
+  if(reducedMotion)await send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
   await send('Page.navigate',{url:process.argv.includes('--portable')?pathToFileURL(path.join(root,'play.html')).href:'http://127.0.0.1:4173'});await sleep(1400);
   if(!process.argv.includes('--resume-check')){await evaluate("localStorage.clear();location.reload()");await sleep(1000);}
   if(lightOnly){await evaluate(`localStorage.setItem('buried-observatory:v1',JSON.stringify({version:1,room:0,player:{x:330,y:230},flags:{archive:true,key:true,pump:true,drained:true,prism:true,projector:true,beamAligned:false},journal:['letter','mural','reflection','mentor','plaque','prism','light'],hints:{},muted:true}));location.reload()`);await sleep(1000);}
+  if(instrumentsOnly){await evaluate(`localStorage.setItem('buried-observatory:v1',JSON.stringify({version:1,room:2,player:{x:160,y:111},flags:{archive:true,key:true,pump:true},journal:['letter','mural','reflection','plaque'],hints:{},muted:true}));location.reload()`);await sleep(700);}
   await screenshot('01-title');
-  if(process.argv.includes('--resume-check')||lightOnly)await click('#continueButton');else{await click('#beginButton');await click('[data-close]');}
+  if(process.argv.includes('--resume-check')||lightOnly||instrumentsOnly)await click('#continueButton');else{await click('#beginButton');await click('[data-close]');}
   await sleep(300);await screenshot('02-broken-dome');
   assert.equal(await evaluate('window.observatory.running'),true);
   assert.equal(await evaluate('(()=>{const r=document.querySelector("#game").getBoundingClientRect();return r.x===0&&r.y===0&&r.width===innerWidth&&r.height===innerHeight})()'),true,'Dungeon fills the browser viewport');
   console.log('PASS title, begin, instructions, initial rendering');
-  if(!process.argv.includes('--resume-check')&&!lightOnly){const before=await evaluate('JSON.stringify(window.observatory.state.player)');await click('#hintButton');for(let i=0;i<3;i++)await click('#nextHint');assert.ok((await evaluate('document.querySelector("#hintText").textContent')).includes('CRESCENT'));await click('[data-close]');assert.equal(await evaluate('JSON.stringify(window.observatory.state.player)'),before);await click('#journalButton');assert.equal(await evaluate('document.querySelectorAll(".journal-entry").length'),1);await click('[data-close]');console.log('PASS progressive hints, journal, overlay blocks movement');}
+  if(!process.argv.includes('--resume-check')&&!lightOnly&&!instrumentsOnly){const before=await evaluate('JSON.stringify(window.observatory.state.player)');await click('#hintButton');for(let i=0;i<3;i++)await click('#nextHint');assert.ok((await evaluate('document.querySelector("#hintText").textContent')).includes('CRESCENT'));await click('[data-close]');assert.equal(await evaluate('JSON.stringify(window.observatory.state.player)'),before);await click('#journalButton');assert.equal(await evaluate('document.querySelectorAll(".journal-entry").length'),1);await click('[data-close]');console.log('PASS progressive hints, journal, overlay blocks movement');}
   if(process.argv.includes('--resume-check')){await click('#journalButton');await screenshot('journal-check');console.log(await evaluate('JSON.stringify({running:window.observatory.running,dialog:document.querySelector("#dialog").open,entries:document.querySelectorAll(".journal-entry").length,notes:window.observatory.state.journal})'));await click('[data-close]');await click('#soundButton');assert.equal(await evaluate('window.observatory.state.muted'),false);await click('#soundButton');}
+  if(process.argv.includes('--movement-only')){
+    const toScreen=async(x,y)=>evaluate(`(()=>{const v=window.observatory.camera;return{x:v.x+${x}*v.scale,y:v.y+(${y}-v.scrollY)*v.scale}})()`);
+    await send('Input.dispatchMouseEvent',{type:'mouseMoved',...await toScreen(240,170)});
+    let detoured=false;const start=Date.now();
+    for(;;){const p=await evaluate('window.observatory.state.player');if(Math.abs(p.x-240)>20)detoured=true;if(Math.hypot(p.x-240,p.y-170)<2)break;if(Date.now()-start>7000)throw Error('Explorer did not find a route around the telescope');await sleep(70);}
+    assert.equal(detoured,true,'Cursor movement detours around the telescope');
+    const mural=await toScreen(104,82);
+    await send('Input.dispatchMouseEvent',{type:'mouseMoved',...mural});await send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...mural});await send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...mural});
+    const approach=Date.now();while(!await evaluate('document.querySelector("#dialog").open')){if(Date.now()-approach>7000)throw Error('Click to approach did not investigate the mural');await sleep(70);}
+    assert.ok((await evaluate('window.observatory.state.journal')).includes('mural'));
+    await click('[data-close]');const before=await evaluate('window.observatory.state.player.x');
+    await send('Input.dispatchKeyEvent',{type:'keyDown',key:'ArrowRight'});await sleep(250);await send('Input.dispatchKeyEvent',{type:'keyUp',key:'ArrowRight'});
+    assert.ok((await evaluate('window.observatory.state.player.x'))>before+10,'Held keyboard input moves continuously');
+    await screenshot('11-movement-and-dome');console.log('PASS obstacle routing, click to approach and continuous keyboard movement');
+  }
+  if(instrumentsOnly){
+    const worldPoint=async(x,y)=>evaluate(`(()=>{const v=window.observatory.camera,s=window.observatory.state;return{x:v.x+${x}*v.scale,y:v.y+(s.room*320+${y}-v.scrollY)*v.scale}})()`);
+    const tap=async(x,y)=>{const p=await worldPoint(x,y);await send('Input.dispatchMouseEvent',{type:'mouseMoved',...p});await send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...p});await send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...p});await sleep(100);};
+    const until=async(expression,message)=>{const start=Date.now();while(!await evaluate(expression)){if(Date.now()-start>7000)throw Error(message);await sleep(70);}};
+    await tap(160,142);assert.equal(await evaluate('window.observatory.instrument'),'pump');assert.equal(await evaluate('document.querySelector("#dialog").open'),false);
+    // Two clockwise physical turns set the first dial to SUN; tap the second to STAR.
+    for(let n=0;n<2;n++){
+      const a=await worldPoint(146,140),b=await worldPoint(153,147);
+      await send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...a});await send('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,...b});await send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...b});
+    }
+    await tap(160,140);assert.deepEqual(await evaluate('window.observatory.state.instruments.pump'),[2,1,0]);
+    await click('#puzzleJournal');await click('[data-close]');assert.deepEqual(await evaluate('window.observatory.state.instruments.pump'),[2,1,0]);
+    await send('Page.reload');await sleep(700);await click('#continueButton');await tap(160,142);
+    assert.deepEqual(await evaluate('window.observatory.state.instruments.pump'),[2,1,0],'Unfinished instrument survives journal and reload');
+    await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await sleep(150);
+    assert.equal(await evaluate('document.documentElement.scrollWidth>innerWidth'),false);await screenshot('15-pump-mobile');
+    await send('Emulation.setDeviceMetricsOverride',{width:390,height:568,deviceScaleFactor:1,mobile:true});await sleep(150);
+    assert.equal(await evaluate('document.querySelector("#mechanismControls").getBoundingClientRect().bottom<=innerHeight'),true);
+    await screenshot('16-pump-short-phone');
+    await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});await sleep(150);
+    await tap(160,174);assert.equal(await evaluate('window.observatory.state.flags.drained'),true,'Physical crank drains the chamber');
+    if(!reducedMotion)assert.ok((await evaluate('window.observatory.effects.water'))>0,'Water recedes visibly instead of disappearing');
+    await sleep(reducedMotion?60:1500);assert.equal(await evaluate('window.observatory.effects.water'),0);
+    await screenshot('12-pump-drained');
+    await tap(363,181);await until('window.observatory.state.flags.generator','Explorer did not approach and pull the routing lever');
+    await sleep(reducedMotion?60:800);assert.equal(await evaluate('window.observatory.effects.power'),1);assert.equal(await evaluate('document.querySelector("#dialog").open'),false);
+    await screenshot('13-turbine-running');
+    const v=await evaluate('window.observatory.camera');await send('Input.dispatchMouseEvent',{type:'mouseWheel',x:v.width/2,y:v.height/2,deltaY:320*v.scale,deltaX:0});await sleep(200);
+    await tap(351,224);await until('window.observatory.instrument==="shutters"','Explorer did not approach the shutters');
+    for(const number of [2,4])await tap(334+(number-1)*12,224);
+    await click('#puzzleJournal');await click('[data-close]');assert.deepEqual(await evaluate('window.observatory.state.instruments.shutters'),[2,4]);
+    await click('#resetSequence');
+    for(const number of [2,4,1,3])await tap(334+(number-1)*12,224);
+    await click('#solveShutters');assert.equal(await evaluate('window.observatory.state.flags.shutters'),true);
+    await sleep(reducedMotion?60:300);assert.deepEqual(await evaluate('window.observatory.effects.shutters'),[1,1,1,1]);
+    await tap(240,136);await until('window.observatory.state.flags.prism','Prism was not collected');assert.equal(await evaluate('document.querySelector("#dialog").open'),false);
+    await screenshot('14-lens-platform');console.log('PASS physical dial dragging, crank, draft persistence, draining water, routing lever, physical shutters and prism pickup'+(reducedMotion?' with reduced motion':''));
+  }
   // Save optimized, faithful display-sized copies of generated assets.
   if(process.argv.includes('--optimize')){
     for(const name of ['dome','archive','pump','lens','beacon','explorer']){
@@ -63,13 +119,13 @@ try{
     await send('Input.dispatchMouseEvent',{type:'mouseWheel',...p,deltaY:-96*firstScale,deltaX:0});await sleep(200);assert.equal(await evaluate('Math.round(window.observatory.camera.scrollY)'),0,'Scrolling up reverses continuously');
     await stairs(1);console.log('PASS room 1: mural, seal, continuous scroll anywhere');
     await walk(150,80);await walk(108,82);await objectClick(108,110);await close();
-    await walk(165,82);await walk(305,190);await walk(332,214);await objectClick(360,214);await close();
-    await walk(310,240);await walk(240,231);await walk(197,231);await objectClick(197,259);await close();
+    await walk(165,82);await walk(305,190);await walk(332,214);await objectClick(360,214,false);
+    await walk(310,240);await walk(240,231);await walk(197,231);await objectClick(197,259,false);
     await walk(240,231);await stairs(1);console.log('PASS room 2: memorandum, key, maintenance lock');
-    await walk(208,82);await walk(160,111);await objectClick(160,142);
+    await walk(208,82);await walk(160,111);await objectClick(160,142,false);
     await click('[data-dial="0"]');await click('[data-dial="0"]');await click('[data-dial="1"]');await click('#solvePuzzle');
     assert.equal((await pos()).flags.drained,true);await walk(210,111);await walk(240,238);await stairs(1);console.log('PASS room 3: reflected regulator sequence');
-    await walk(240,104);await objectClick(240,136);await close();await screenshot('03-lens-chamber');
+    await walk(240,104);await objectClick(240,136,false);await screenshot('03-lens-chamber');
     await walk(280,104);await walk(280,80);await walk(240,80);await stairs(-1);
     await walk(270,240);await walk(270,90);await walk(240,90);await stairs(-1);
     await walk(280,240);await walk(280,85);await walk(240,85);await stairs(-1);
@@ -119,9 +175,9 @@ try{
     await walk(310,190);await walk(240,235);await stairs(1);console.log('PASS prism return, cross-floor framing, wrong aim, keyboard, touch, drag, and latched beam');
     await walk(300,90);await walk(340,100);await objectClick(371,100);await close();assert.ok((await pos()).journal.includes('projection'));
     await walk(300,160);await walk(240,235);await stairs(1);
-    await walk(300,100);await walk(363,147);await objectClick(363,181);await close();assert.equal((await pos()).flags.generator,true);
+    await walk(300,100);await walk(363,147);await objectClick(363,181,false);assert.equal((await pos()).flags.generator,true);
     await walk(320,230);await walk(240,238);await stairs(1);console.log('PASS changed Archive and generator rerouting');
-    await walk(280,83);await walk(310,190);await walk(351,190);await objectClick(351,224);
+    await walk(280,83);await walk(310,190);await walk(351,190);await objectClick(351,224,false);
     for(const n of [2,4,1,3])await click(`[data-shutter="${n}"]`);await click('#solveShutters');
     assert.equal((await pos()).flags.shutters,true);await walk(300,255);await walk(240,255);await stairs(1);
     await walk(300,105);await walk(350,125);await objectClick(350,155);await close();await walk(295,150);await walk(275,169);await objectClick(240,169);await click('#lightBeacon');

@@ -24,31 +24,41 @@ Validation completed:
 - Desktop, narrow phone, and 390×568 short-phone layouts checked.
 - Standards and specification review complete; shared handle geometry consolidated so drawing and dragging use the same position.
 
-Items 2–8 remain planned for later work.
+Gameplay pass implemented: movement → hands-on mechanisms → visible consequences → room layouts. Story pacing, the remaining journal work, and the ending follow afterward.
 
-## 2. Give each room a distinct shape — planned
+## 2. Give each room a distinct shape — complete
 
 Introduce a collapsed Dome, narrow Archive aisles, Pump Room catwalks, and a circular Lens Chamber. Match collision geometry to the artwork and preserve reachable objects.
 
-## 3. Manipulate mechanisms inside the room — planned
+The Dome now has fallen masonry, the Archive has shelf aisles, the Pump Room has walkways around a deep water basin, and the Lens Chamber sits on a curved platform over a dark drop. Shared feature geometry drives both rendering and collision. Every interactable has a tested approach route from its room entrance; old positions inside newly blocked areas recover to a safe arrival.
+
+## 3. Manipulate mechanisms inside the room — complete
 
 Keep the introductory symbol lock, then vary later puzzles with rotating mirrors, movable prisms, and valves whose effects are visible in the room.
 
-## 4. Smooth movement around objects — planned
+The first lock stays an introductory dialog. Later actions happen in the room: drag/tap the Pump Room's brass dials, turn its physical crank, pull the water-routing lever, collect the prism, aim the shaft mirror, and lift four shutter tabs in sequence. Nonmodal button/keyboard equivalents remain available. Pickups and lever operation no longer open explanatory dialogs. Instrument drafts persist through journal visits and reloads.
+
+## 4. Smooth movement around objects — complete
 
 Add obstacle avoidance and an optional click-to-approach-and-investigate interaction while retaining mouse-follow movement by default.
+
+Mouse-follow movement routes around walls, fixtures, shelves, and basin edges. Clicking a distant object walks the explorer over and investigates on arrival. Continuous held-key movement uses direct collision-safe control; pointer movement can cancel an approach. Speed increased from 67 to 94 world units per second, and routes are smoothed to avoid grid-shaped movement. Navigation grids warm during idle time.
 
 ## 5. Reveal Elian's story gradually — planned
 
 Spread the transmitter explanation and rescue plan across footprints, sounds, unfinished diagrams, and later discoveries.
 
-## 6. Make solved puzzles transform the observatory — planned
+## 6. Make solved puzzles transform the observatory — complete
 
 Show water draining, the turbine spinning, light crossing floors, and shutters opening in order. Make each solved mechanism visibly change the environment.
+
+Water visibly recedes from the basin, the routing lever moves as turbine power rises/falls, the waterwheel spins with power, and shutter leaves lift as their tabs are operated. Pickups disappear from their housings/desks, solved doors expose stairs, and successful operations produce a brief local glow and a distinct sound cue when audio is enabled. Reduced-motion mode uses immediate water/lever/shutter states and keeps the wheel still.
 
 ## 7. Improve the journal during puzzles — planned
 
 Add clue sketches, a pinned-clue view, and persistent unfinished puzzle inputs when consulting notes.
+
+Partial progress: introductory dials, pump dials, and unfinished shutter sequences now persist. Clue sketches and a pinned-clue view remain planned.
 
 ## 8. Give the ending a playable payoff — planned
 

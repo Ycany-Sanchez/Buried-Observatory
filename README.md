@@ -1,6 +1,6 @@
 # The Buried Observatory
 
-A complete, five-room pixel-art browser mystery that fills the browser window. Move the mouse to lead the explorer, click nearby objects, and scroll continuously through unlocked rooms. Earlier clues become useful deeper in the observatory.
+A complete, five-room pixel-art browser mystery that fills the browser window. Move the mouse to lead the explorer around obstacles, click objects to approach and investigate, and scroll continuously through unlocked rooms. Earlier clues become useful deeper in the observatory.
 
 Open `play.html` directly in a modern browser for the self-contained edition. It includes all game code and artwork. No server or installation is required. Browser-local saves depend on your browser allowing storage for local files. Online fonts are optional and have local fallbacks.
 
@@ -20,12 +20,14 @@ To regenerate the self-contained edition after editing, run `node tools/build-po
 
 ## Controls
 
-- Mouse: guide explorer; click nearby objects.
+- Mouse: guide the explorer around obstacles; click objects to approach and investigate automatically. Moving the pointer to a new destination cancels the previous approach.
 - Scroll down anywhere to descend; scroll up to revisit earlier chambers. Scrolling follows the wheel or trackpad continuously and stops at locked boundaries.
-- Arrow keys or WASD: supplementary movement. Enter/E: nearby interaction.
+- Hold arrow keys or WASD: continuous direct movement. Enter/E: nearby interaction.
 - Page Down/Up: move the view one chamber. J: journal. H: hints. F: toggle fullscreen. Escape: close dialog/menu.
 - Expedition button: review current objective, unlocked rooms, and inventory.
 - Shaft mirror: after installing the prism, investigate the mirror beside the Dome's southern stairs. Scroll partway down to frame the mirror and Archive receiver together. Drag the handle or use Left/Right to aim, then Enter to lock. Up/Down and the view buttons adjust the scroll; Escape leaves adjustment. Touch players can swipe the canvas while adjusting.
+- Pump Room: turn the three physical dials by dragging clockwise or tapping. Turn the round crank below the instrument to drain the basin. Buttons and keys 1–3 provide the same controls; Enter turns the crank. The routing lever directly controls water flowing to the turbine.
+- Lens Chamber: lift the numbered shutter tabs in sequence, then align them. Use the physical tabs, buttons, or keys 1–4. Enter aligns; Escape leaves an instrument. Unfinished dials and shutter sequences survive journal visits and reloads.
 
 Progress autosaves to versioned browser-local storage. Starting a new journey requires confirmation. Audio starts muted; enable it with the sound button.
 
@@ -33,6 +35,8 @@ Progress autosaves to versioned browser-local storage. Starting a new journey re
 
 - `dist/state.mjs`: pure puzzle transitions, save restoration, objectives, and contextual hints.
 - `dist/rooms.mjs`: geometry, collision, stairways, and interactive object definitions.
+- `dist/navigation.mjs`: cached navigation grids, obstacle routing, and safe movement segments.
+- `dist/instruments.mjs`: physical dial/crank/shutter hit areas and validated instrument drafts.
 - `dist/camera.mjs`: continuous scrolling, viewport fitting, and coordinate conversion.
 - `dist/light.mjs`: cross-floor light geometry, framing, and alignment checks.
 - `dist/art.mjs`: crisp pixel rendering, room decoration, effects, and asset composition.
@@ -40,8 +44,12 @@ Progress autosaves to versioned browser-local storage. Starting a new journey re
 - `tests/state.test.mjs`: full solution, reversible water state, invalid inputs, and save recovery.
 - `tests/camera.test.mjs`: scroll boundaries, trackpad/wheel units, and screen-to-world mapping.
 - `tests/light.test.mjs`: cross-floor framing, incorrect aim, progression gating, and old-save migration.
+- `tests/navigation.test.mjs`: obstacle detours, safe segments, and approach routes to every object.
+- `tests/instruments.test.mjs`: physical control geometry and unfinished-save recovery.
 
 With local Chrome installed, `node tools/browser-qa.mjs --full` checks the complete journey. Use `--light-only` for the mirror interaction, or `--light-only --portable` to check it in the self-contained edition. The browser checks use an isolated QA profile.
+
+`--movement-only` checks routing and click-to-approach. `--instruments-only` checks physical dial dragging, the crank, shutters, draft persistence, water/turbine feedback, and narrow layouts. Add `--portable` for the self-contained edition or `--reduced-motion` for gentler feedback.
 
 ## Art
 

@@ -3,6 +3,8 @@ import { W, H, ROOMS, isWalkable, safePosition, nearbyObject } from './rooms.mjs
 import { makeScene, drawFrame, drawLightPath } from './art.mjs';
 import { viewport, clampScroll, roomAtScroll, screenToWorld, worldToScreen, wheelDistance } from './camera.mjs';
 import { LIGHT_PATH, clampLightAim, lightHandle, lightInView, lightAligned } from './light.mjs';
+import { routeTo, clearPath, prepareNavigation } from './navigation.mjs';
+import { instrumentPart } from './instruments.mjs';
 
 const $ = id => document.getElementById(id);
 const canvas = $('game'), ctx = canvas.getContext('2d');
@@ -17,6 +19,14 @@ let state = restoreState(saved), running = false, target = null, pointer = null,
 let view = viewport(innerWidth, innerHeight), cameraY = state.room * H, scrollingUntil = 0, boundaryNotice = 0;
 const scenes = new Map(), roomPositions = new Map();
 let adjustingLight = false, lightAim = LIGHT_PATH.initialAim, lightDrag = null;
+let route=[],routeGoal=null,routeRoom=-1,nextRouteAt=0,pendingInteraction=null;
+const heldDirections=new Set();
+// Prepare one room per idle task while the title screen is available.
+let nextNavigationRoom=0;
+function warmNavigation(){if(nextNavigationRoom>=ROOMS.length)return;prepareNavigation(nextNavigationRoom++);if(window.requestIdleCallback)window.requestIdleCallback(warmNavigation);else setTimeout(warmNavigation,40);}
+if(window.requestIdleCallback)window.requestIdleCallback(warmNavigation);else setTimeout(warmNavigation,40);
+let activeInstrument=null,instrumentDrag=null;
+let visual={water:state.flags.drained?0:1,power:state.flags.generator?1:0,shutters:[0,0,0,0],crank:0,wheel:0,pulse:null};
 state.player = safePosition(state.room, state.player);
 let hasSave = !!saved && state.version === 1;
 if (hasSave) { $('continueButton').hidden = false; $('beginButton').textContent = 'Begin a new descent ↓'; }
@@ -67,6 +77,7 @@ function activateRoom(room) {
 }
 function scrollDungeon(distance) {
   if (!running || dialog.open || busy) return;
+  if(activeInstrument)leaveInstrument();
   const next = clampScroll(cameraY + distance, lastUnlocked(state));
   if (Math.abs(next - cameraY) < .01) {
     if (distance > 0 && performance.now() - boundaryNotice > 2200) {
@@ -96,6 +107,7 @@ function leaveLight() {
   $('lightControls').hidden=true;$('app').classList.remove('aiming-light');
 }
 function beginLight() {
+  leaveInstrument();heldDirections.clear();
   if(!state.flags.projector)return description('The shaft mirror','An unlit mirror points down through a narrow slit in the stone. Restore the Dome projector first.');
   if(state.flags.beamAligned)return description('The latched mirror','The brass catch holds the beam on the Archive receiver. The hidden writing is waiting below.');
   adjustingLight=true;target=null;pointer=null;
@@ -120,10 +132,17 @@ function toast(text, duration = 3800) {
   toastTimer = setTimeout(() => $('toast').hidden = true, duration);
 }
 function commit(action) {
-  const result = applyAction(state, action); state = result.state; updateUI(); save();
-  if (result.ok) chime(); return result;
+  const before=state.flags,result=applyAction(state,action);state=result.state;updateUI();save();
+  if(result.ok){
+    const changed=Object.keys(state.flags).find(key=>before[key]!==state.flags[key]);
+    if(changed){const object=ROOMS[state.room].objects.find(o=>o.action===action.type||o.puzzle===action.type.replace('solve_',''));
+      visual.pulse={room:state.room,x:object?.x??240,y:object?.y??160,started:performance.now()/1000};soundCue(changed);
+    }else chime(1);
+  }
+  return result;
 }
 function shell(eyebrow, title, body, footer = '') {
+  heldDirections.clear();pendingInteraction=null;
   target = null; moved = false; pointer = null; $('hoverLabel').hidden = true;
   $('dialogContent').innerHTML = `<div class="dialog-inner"><div class="dialog-top"><p class="eyebrow">${eyebrow}</p><button class="close-button" data-close aria-label="Close dialog">×</button></div><h2 id="dialogTitle">${title}</h2>${body}${footer ? `<div class="dialog-bottom">${footer}</div>` : ''}</div>`;
   for (const button of dialog.querySelectorAll('[data-close]')) button.addEventListener('click', () => dialog.close());
@@ -154,21 +173,56 @@ function openPuzzle(type) {
   if (type === 'entry' && state.flags.archive) return description('The celestial seal', 'The Archive is already open. Scroll down anywhere to descend.');
   if (type === 'pump' && state.flags.drained) return description('The latched regulator', 'The lower chamber is drained and the sluice has latched. The routing lever on the right can now supply the generator.');
   if (type === 'shutters' && state.flags.shutters) return description('The aligned shutters', `The four shutters stand open. ${state.flags.generator&&state.flags.beamAligned?'The final stairs are ready.':'The seal still needs aligned light from the Dome mirror and power from the Pump Room turbine.'}`);
-  if (type === 'shutters') return shutterPuzzle();
-  const code = type === 'entry' ? ['sun','sun','sun'] : ['crescent','crescent','crescent'];
+  if (type === 'shutters'||type==='pump') return beginInstrument(type);
+  const code = state.instruments.entry.map(n=>SYMBOLS[n]);
   const renderDial = (id) => `<span class="symbol" aria-hidden="true">${icons[id]}</span><small>${id.toUpperCase()}</small>`;
   shell(type === 'entry' ? 'THE FIRST CELESTIAL SEAL' : 'THE LOWER INSTRUMENT', type === 'entry' ? 'A procession in brass' : 'The sky, from beneath', `<p class="dialog-copy">${type==='entry'?'Three brass dials turn beneath a worn inscription: “As above, the first door remembers.”':'The regulator has three celestial dials. Its inscription reads: “The keeper below sees a different sky.”'}</p><div class="dial-row">${code.map((id,i)=>`${i?'<span class="dial-divider">·</span>':''}<button class="dial" data-dial="${i}" aria-label="Dial ${i+1}: ${id}. Click to change.">${renderDial(id)}</button>`).join('')}</div><p class="mechanism-result" id="mechanismResult" role="status">Click each dial to change its symbol.</p>`, `<button class="secondary" id="puzzleJournal">Consult journal</button><button class="primary" id="solvePuzzle">${type==='entry'?'Turn the seal':'Turn regulator'} <span>↗</span></button>`);
-  for (const b of dialog.querySelectorAll('[data-dial]')) b.onclick = () => { const i=Number(b.dataset.dial);code[i]=SYMBOLS[(SYMBOLS.indexOf(code[i])+1)%3];b.innerHTML=renderDial(code[i]);b.setAttribute('aria-label',`Dial ${i+1}: ${code[i]}. Click to change.`);chime(1); };
+  for (const b of dialog.querySelectorAll('[data-dial]')) b.onclick = () => { const i=Number(b.dataset.dial);state.instruments.entry[i]=(state.instruments.entry[i]+1)%3;code[i]=SYMBOLS[state.instruments.entry[i]];save();b.innerHTML=renderDial(code[i]);b.setAttribute('aria-label',`Dial ${i+1}: ${code[i]}. Click to change.`);chime(1); };
   $('puzzleJournal').onclick = openJournal;
   $('solvePuzzle').onclick = () => {const r=commit({type:type==='entry'?'solve_entry':'solve_pump',code});if(r.ok){dialog.close();toast(r.message,6000);}else{$('mechanismResult').textContent=r.message;}};
 }
-function shutterPuzzle() {
-  let code = [];
-  shell('THE SOUTHERN SEAL', 'Four shutters. One order.', '<p class="dialog-copy">Four numbered brass shutters surround a sealed light shaft. A small mechanism records the order in which you open them.</p><div class="shutter-row">'+[1,2,3,4].map(n=>`<button class="shutter" data-shutter="${n}" aria-label="Open shutter ${n}">${n}</button>`).join('')+'</div><div class="sequence-readout" id="sequenceReadout" aria-live="polite">— — — —</div><p class="mechanism-result" id="mechanismResult" role="status">Choose four shutters in sequence.</p>', '<button class="secondary" id="resetSequence">Reset sequence</button><button class="primary" id="solveShutters" disabled>Align shutters <span>↗</span></button>');
-  const update = () => { $('sequenceReadout').textContent = [...code,...Array(4-code.length).fill('—')].join(' ');$('solveShutters').disabled=code.length!==4;for(const b of dialog.querySelectorAll('[data-shutter]'))b.disabled=code.length===4; };
-  for(const b of dialog.querySelectorAll('[data-shutter]'))b.onclick=()=>{if(code.length<4){code.push(b.dataset.shutter);chime(1);update();}};
-  $('resetSequence').onclick=()=>{code=[];update();$('mechanismResult').textContent='Choose four shutters in sequence.';};
-  $('solveShutters').onclick=()=>{const r=commit({type:'solve_shutters',code});if(r.ok){dialog.close();toast(r.message,6000);}else{$('mechanismResult').textContent=r.message;}};
+function leaveInstrument(){activeInstrument=null;instrumentDrag=null;$('mechanismControls').hidden=true;$('app').classList.remove('operating-instrument');}
+function beginInstrument(type){
+  leaveLight();heldDirections.clear();target=null;pointer=null;
+  activeInstrument={type,room:state.room};const pump=type==='pump',panel=$('mechanismControls');
+  panel.innerHTML=`<div class="light-controls-heading"><span class="eyebrow">${pump?'THE LOWER INSTRUMENT':'THE SOUTHERN SEAL'}</span><button id="leaveInstrument" class="close-button" aria-label="Leave instrument">×</button></div><h2 id="mechanismTitle">${pump?'Turn the sky beneath.':'Four shutters. One order.'}</h2><p>${pump?'Drag the brass dials on the regulator, then turn the round crank below it. You can also use these controls.':'Lift the numbered tabs on the instrument. Watch each shutter open as you build the sequence.'}</p>${pump?'<div class="instrument-dials">'+[0,1,2].map(i=>`<button class="dial" data-dial="${i}"></button>`).join('')+'</div>':'<div class="instrument-tabs">'+[1,2,3,4].map(n=>`<button class="shutter" data-shutter="${n}" aria-label="Lift shutter ${n}">${n}</button>`).join('')+'</div><div id="sequenceReadout" class="sequence-readout"></div>'}<p id="mechanismResult" class="light-status" role="status">${pump?'Set the three dials, then turn the crank.':'Choose four shutters in sequence.'}</p><div class="instrument-actions"><button id="puzzleJournal" class="secondary">Journal</button>${pump?'':'<button id="resetSequence" class="secondary">Reset</button>'}<button id="${pump?'solvePuzzle':'solveShutters'}" class="primary">${pump?'Turn crank':'Align shutters'}</button></div><small>${pump?'1–3 TURN DIALS · ENTER CRANK':'1–4 LIFT SHUTTERS · ENTER ALIGN'} · ESC LEAVE</small>`;
+  panel.hidden=false;$('app').classList.add('operating-instrument');$('hoverLabel').hidden=true;
+  $('leaveInstrument').onclick=()=>{leaveInstrument();canvas.focus({preventScroll:true});};$('puzzleJournal').onclick=openJournal;
+  for(const b of panel.querySelectorAll('[data-dial]'))b.onclick=()=>turnInstrumentDial(Number(b.dataset.dial),1);
+  for(const b of panel.querySelectorAll('[data-shutter]'))b.onclick=()=>liftShutter(Number(b.dataset.shutter));
+  if(!pump)$('resetSequence').onclick=()=>{state.instruments.shutters=[];save();updateInstrumentControls();$('mechanismResult').textContent='Choose four shutters in sequence.';};
+  $(pump?'solvePuzzle':'solveShutters').onclick=attemptInstrument;updateInstrumentControls();canvas.focus({preventScroll:true});
+}
+function updateInstrumentControls(){
+  if(!activeInstrument)return;
+  const panel=$('mechanismControls');
+  if(activeInstrument.type==='pump')for(const b of panel.querySelectorAll('[data-dial]')){const i=Number(b.dataset.dial),value=SYMBOLS[state.instruments.pump[i]];b.innerHTML=`<span class="symbol" aria-hidden="true">${icons[value]}</span><small>${value}</small>`;b.setAttribute('aria-label',`Dial ${i+1}: ${value}. Turn clockwise.`);}
+  else {const code=state.instruments.shutters;$('sequenceReadout').textContent=[...code,...Array(4-code.length).fill('—')].join(' ');$('solveShutters').disabled=code.length!==4;for(const b of panel.querySelectorAll('[data-shutter]'))b.disabled=code.length===4;}
+}
+function turnInstrumentDial(index,direction){state.instruments.pump[index]=(state.instruments.pump[index]+direction+3)%3;save();updateInstrumentControls();chime(1);}
+function liftShutter(number){if(state.instruments.shutters.length>=4)return;state.instruments.shutters.push(number);save();updateInstrumentControls();chime(1);}
+function attemptInstrument(){
+  if(!activeInstrument||dialog.open)return;
+  const pump=activeInstrument.type==='pump',code=pump?state.instruments.pump.map(n=>SYMBOLS[n]):state.instruments.shutters.map(String);
+  const result=commit({type:pump?'solve_pump':'solve_shutters',code});
+  if(result.ok){leaveInstrument();canvas.focus({preventScroll:true});toast(result.message,6000);}else{$('mechanismResult').textContent=result.message;soundCue('wrong');}
+}
+function beginInstrumentDrag(e,p){
+  const part=instrumentPart(activeInstrument.type,p);if(!part)return;
+  instrumentDrag={...part,moved:false,total:0,angle:part.center?Math.atan2(p.y-part.center.y,p.x-part.center.x):0};
+  canvas.setPointerCapture(e.pointerId);e.preventDefault();
+}
+function moveInstrumentDrag(p){
+  const drag=instrumentDrag;if(!drag?.center)return;
+  const angle=Math.atan2(p.y-drag.center.y,p.x-drag.center.x),delta=Math.atan2(Math.sin(angle-drag.angle),Math.cos(angle-drag.angle));drag.angle=angle;
+  if(Math.abs(delta)>.04)drag.moved=true;drag.total+=delta;
+  if(drag.kind==='dial'&&Math.abs(drag.total)>.65){turnInstrumentDial(drag.index,Math.sign(drag.total));drag.total=0;}
+  if(drag.kind==='crank'){visual.crank+=delta;if(drag.total>Math.PI/2){instrumentDrag=null;attemptInstrument();}}
+}
+function finishInstrumentDrag(){
+  const drag=instrumentDrag;instrumentDrag=null;if(!drag||!activeInstrument||dialog.open)return;
+  if(drag.kind==='shutter')liftShutter(drag.number);
+  else if(!drag.moved){if(drag.kind==='dial')turnInstrumentDial(drag.index,1);else attemptInstrument();}
 }
 function interact(o) {
   if (!o || busy || dialog.open) return;
@@ -185,9 +239,10 @@ function interact(o) {
   if(o.action==='restore_projector'&&state.flags.projector)return description('A restored projector',state.flags.beamAligned?'The aligned beam lights the Archive wall below.':'Light reaches the shaft mirror beside the southern stairs. Adjust that mirror while viewing the Dome and Archive together.');
   const r=commit({type:o.action});
   const noteIds={inspect_mural:'mural',inspect_reflection:'reflection',inspect_mentor:'mentor',inspect_plaque:'plaque',inspect_wall:'projection',collect_prism:'prism'};
+  if(r.ok&&(o.action==='collect_prism'||o.action==='take_key'||o.action==='unlock_pump')){toast(r.message,5000);return;}
   if(r.ok&&noteIds[o.action])return notePanel(noteIds[o.action]);
   if(o.action==='meet_mentor')return description('Elian',r.message);
-  if(o.action==='route_generator'){description(state.flags.generator?'The turbine wakes':'The bypass is open',r.message);return;}
+  if(o.action==='route_generator'){toast(r.message,5000);return;}
   description(o.label,r.message);
 }
 function ending() {
@@ -195,12 +250,14 @@ function ending() {
   $('dialogContent').firstElementChild.classList.add('ending');$('endingDone').onclick=()=>dialog.close();
 }
 function instructions() {
-  shell('YOUR FIRST DESCENT', 'Follow your little light', '<p class="dialog-copy">Move your mouse across the chamber. Your explorer follows, and walls stop them.<br><br>Walk close to objects, then click to investigate. Scroll down to go deeper, and scroll up to revisit earlier rooms. The dungeon moves continuously beneath you; solve each seal to unlock more of it.<br><br>Keep your field journal close. A clue from an earlier room may be exactly what you need below. Hints are always optional.</p><p class="journal-tag">ALSO: ARROW KEYS TO WALK · ENTER TO INTERACT<br>PAGE UP / DOWN TO TRAVEL · J JOURNAL · H HINT · F FULLSCREEN</p>', '<span class="journal-tag">NO CLOCK. NO PENALTIES.</span><button class="primary" data-close>Light the lantern <span>✧</span></button>');
+  shell('YOUR FIRST DESCENT', 'Follow your little light', '<p class="dialog-copy">Move your mouse across the chamber. Your explorer follows and finds a way around obstacles.<br><br>Click an object to walk over and investigate it. Hold arrow keys or WASD for direct control. Scroll down to go deeper, and scroll up to revisit earlier rooms.<br><br>Keep your field journal close. A clue from an earlier room may be exactly what you need below. Hints are always optional.</p><p class="journal-tag">ENTER TO INTERACT · PAGE UP / DOWN TO TRAVEL<br>J JOURNAL · H HINT · F FULLSCREEN</p>', '<span class="journal-tag">NO CLOCK. NO PENALTIES.</span><button class="primary" data-close>Light the lantern <span>✧</span></button>');
 }
 function start(continueSave=false) {
-  leaveLight();lightAim=LIGHT_PATH.initialAim;
+  leaveLight();leaveInstrument();lightAim=LIGHT_PATH.initialAim;
   if (!continueSave) { state=freshState();hasSave=true; }
   state.player=safePosition(state.room,state.player);running=true;target=null;pointer=null;roomPositions.clear();cameraY=state.room*H;
+  route=[];routeGoal=null;pendingInteraction=null;heldDirections.clear();
+  visual={water:state.flags.drained?0:1,power:state.flags.generator?1:0,shutters:[0,0,0,0].map(()=>state.flags.shutters?1:0),crank:0,wheel:0,pulse:null};
   $('startScreen').hidden=true;$('app').hidden=false;rebuildScene();resize();updateUI();save();
   if (!state.muted) setAudio();
   if (!continueSave) instructions(); else if(state.flags.finished) toast('Welcome back. The beacon is still burning.');
@@ -219,13 +276,15 @@ function doTravel(direction) {
 }
 function point(event){const r=canvas.getBoundingClientRect(),p=screenToWorld(event.clientX-r.left,event.clientY-r.top,view,cameraY),room=Math.floor(p.y/H);return{x:p.x,y:p.y-room*H,room};}
 function followPointer(event){
-  if(!running||dialog.open||busy||adjustingLight)return;
+  if(!running||dialog.open||busy||adjustingLight||activeInstrument)return;
   const p=point(event);
   if(p.room<0||p.room>lastUnlocked(state)||p.x<0||p.x>W){pointer=null;target=null;return;}
-  activateRoom(p.room);pointer={x:p.x,y:p.y};target={...pointer};
+  activateRoom(p.room);pointer={x:p.x,y:p.y};
+  if(!target||Math.hypot(target.x-p.x,target.y-p.y)>2){target={...pointer};pendingInteraction=null;}
 }
 function objectUnder(p){return ROOMS[state.room].objects.find(o=>Math.abs(p.x-o.x)<o.w/2+7&&Math.abs(p.y-o.y)<o.h/2+7);}
 canvas.addEventListener('pointermove',e=>{
+  if(activeInstrument){if(!dialog.open&&instrumentDrag){const p=point(e);if(p.room===activeInstrument.room)moveInstrumentDrag(p);}return;}
   if(adjustingLight){
     if(dialog.open||!lightDrag)return;
     if(lightDrag.kind==='mirror'){const p=point(e);dragLight({x:p.x,y:p.room*H+p.y});}
@@ -238,6 +297,7 @@ canvas.addEventListener('pointerleave',()=>{target=null;pointer=null;$('hoverLab
 canvas.addEventListener('pointerdown',e=>{
   if(!running||dialog.open||busy)return;
   canvas.focus({preventScroll:true});
+  if(activeInstrument){const p=point(e);if(p.room===activeInstrument.room)beginInstrumentDrag(e,p);return;}
   if(adjustingLight){
     const p=point(e),world={x:p.x,y:p.room*H+p.y},handle=lightHandle(lightAim);
     if(Math.hypot(world.x-handle.x,world.y-handle.y)<=18||Math.hypot(world.x-LIGHT_PATH.source.x,world.y-LIGHT_PATH.source.y)<=18)lightDrag={kind:'mirror'};
@@ -247,15 +307,22 @@ canvas.addEventListener('pointerdown',e=>{
   }
   followPointer(e);if(e.pointerType==='touch')e.preventDefault();
 });
-function endLightDrag(e){lightDrag=null;if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);}
+function endLightDrag(e){if(e.type==='pointerup')finishInstrumentDrag();else instrumentDrag=null;lightDrag=null;if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);}
 canvas.addEventListener('pointerup',endLightDrag);
 canvas.addEventListener('pointercancel',endLightDrag);
-canvas.addEventListener('lostpointercapture',()=>{lightDrag=null;});
-canvas.addEventListener('click',e=>{if(!running||dialog.open||busy||adjustingLight)return;const p=point(e);if(p.room!==state.room)return;const o=objectUnder(p);if(o){if(Math.hypot(o.x-state.player.x,o.y-state.player.y)<=42)interact(o);else toast('Move closer to investigate.',1800);}});
+canvas.addEventListener('lostpointercapture',()=>{lightDrag=null;instrumentDrag=null;});
+canvas.addEventListener('click',e=>{if(!running||dialog.open||busy||adjustingLight||activeInstrument)return;const p=point(e);if(p.room!==state.room)return;const o=objectUnder(p);if(o){if(Math.hypot(o.x-state.player.x,o.y-state.player.y)<=42)interact(o);else{target={x:o.x,y:o.y};routeGoal=null;pendingInteraction={room:state.room,object:o};toast('Walking to '+o.label.toLowerCase()+'…',1600);}}});
 document.addEventListener('wheel',e=>{if(!running||dialog.open||e.ctrlKey)return;e.preventDefault();scrollDungeon(wheelDistance(e.deltaY,e.deltaMode,view));},{passive:false});
 document.addEventListener('keydown',e=>{
   if(!running||dialog.open)return;
   const k=e.key.toLowerCase();
+  if(activeInstrument){
+    if(k==='escape'){e.preventDefault();leaveInstrument();canvas.focus({preventScroll:true});return;}
+    if(k==='enter'&&e.target.closest('button'))return;
+    if(/^[1-4]$/.test(k)){e.preventDefault();const n=Number(k);if(activeInstrument.type==='pump'){if(n<=3)turnInstrumentDial(n-1,1);}else liftShutter(n);return;}
+    if(k==='enter'||k==='e'){e.preventDefault();attemptInstrument();return;}
+    if(['arrowup','arrowdown','arrowleft','arrowright','w','a','s','d'].includes(k)){e.preventDefault();return;}
+  }
   if(adjustingLight){
     if(k==='escape'){e.preventDefault();leaveLight();canvas.focus({preventScroll:true});return;}
     // Native buttons retain their Enter/Space behavior when tabbed to.
@@ -270,8 +337,9 @@ document.addEventListener('keydown',e=>{
   if(k==='pagedown'||k==='pageup'){e.preventDefault();doTravel(k==='pagedown'?1:-1);return;}
   if(k==='enter'||k==='e'){e.preventDefault();interact(nearbyObject(state.room,state.player));return;}
   const directions={arrowup:[0,-20],w:[0,-20],arrowdown:[0,20],s:[0,20],arrowleft:[-20,0],a:[-20,0],arrowright:[20,0],d:[20,0]};
-  if(directions[k]){e.preventDefault();const [x,y]=directions[k];target={x:state.player.x+x,y:state.player.y+y};pointer=null;}
+  if(directions[k]){e.preventDefault();heldDirections.add(k);target=null;pointer=null;pendingInteraction=null;}
 });
+document.addEventListener('keyup',e=>heldDirections.delete(e.key.toLowerCase()));
 dialog.addEventListener('close',()=>{target=null;pointer=null;if(running)canvas.focus({preventScroll:true});});
 dialog.addEventListener('click',e=>{if(e.target===dialog){const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dialog.close();}});
 $('beginButton').onclick=()=>hasSave?confirmNew():start(false);
@@ -287,8 +355,8 @@ $('fullscreenButton').onclick=toggleFullscreen;
 document.addEventListener('fullscreenchange',()=>{const on=!!document.fullscreenElement;$('fullscreenButton').setAttribute('aria-pressed',String(on));$('fullscreenButton').setAttribute('aria-label',on?'Exit fullscreen':'Enter fullscreen');resize();});
 window.addEventListener('resize',resize);
 $('soundButton').onclick=()=>{state.muted=!state.muted;setAudio();updateUI();save();};
-window.addEventListener('blur',()=>{target=null;pointer=null;lightDrag=null;save();});
-document.addEventListener('visibilitychange',()=>{if(document.hidden){target=null;pointer=null;save();audio?.context.suspend();}else if(!state.muted&&running)audio?.context.resume();});
+window.addEventListener('blur',()=>{target=null;pointer=null;lightDrag=null;instrumentDrag=null;heldDirections.clear();save();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){target=null;pointer=null;heldDirections.clear();save();audio?.context.suspend();}else if(!state.muted&&running)audio?.context.resume();});
 window.addEventListener('pagehide',save);
 
 function setAudio(){
@@ -298,16 +366,39 @@ function setAudio(){
   audio.context.resume();audio.master.gain.setTargetAtTime(state.muted?0:1,audio.context.currentTime,.15);
 }
 function chime(quiet=0){if(state.muted||!audio)return;const {context,master}=audio;const osc=context.createOscillator(),gain=context.createGain();osc.type='sine';osc.frequency.value=quiet?440:659.25;gain.gain.setValueAtTime(0,context.currentTime);gain.gain.linearRampToValueAtTime(quiet?.025:.05,context.currentTime+.01);gain.gain.exponentialRampToValueAtTime(.001,context.currentTime+.35);osc.connect(gain).connect(master);osc.start();osc.stop(context.currentTime+.4);}
+function soundCue(kind){
+  if(state.muted||!audio)return;
+  const notes=kind==='wrong'?[145,130]:kind==='key'||kind==='prism'?[523.25,783.99,1046.5]:kind==='drained'||kind==='generator'?[110,164.81,220]:[329.63,493.88,659.25];
+  const {context,master}=audio;
+  notes.forEach((frequency,i)=>{const start=context.currentTime+i*.08,osc=context.createOscillator(),gain=context.createGain();osc.type=kind==='drained'?'triangle':'sine';osc.frequency.value=frequency;gain.gain.setValueAtTime(0,start);gain.gain.linearRampToValueAtTime(.035,start+.015);gain.gain.exponentialRampToValueAtTime(.001,start+.5);osc.connect(gain).connect(master);osc.start(start);osc.stop(start+.55);});
+}
 function tick(time){
   const dt=Math.min((time-lastTime)/1000,.04)||0;lastTime=time;moved=false;
-  if(running&&!dialog.open&&!busy&&!adjustingLight&&target){
-    const dx=target.x-state.player.x,dy=target.y-state.player.y,dist=Math.hypot(dx,dy);
-    if(dist>1){const step=Math.min(dist,67*dt),vx=dx/dist*step,vy=dy/dist*step;const p=state.player;
-      if(isWalkable(state.room,p.x+vx,p.y)){p.x+=vx;moved=true;}
-      if(isWalkable(state.room,p.x,p.y+vy)){p.y+=vy;moved=true;}
+  if(!target){route=[];routeGoal=null;pendingInteraction=null;}
+  if(running&&!dialog.open&&!busy&&!adjustingLight&&!activeInstrument){
+    const p=state.player;
+    const dx=Number(heldDirections.has('arrowright')||heldDirections.has('d'))-Number(heldDirections.has('arrowleft')||heldDirections.has('a'));
+    const dy=Number(heldDirections.has('arrowdown')||heldDirections.has('s'))-Number(heldDirections.has('arrowup')||heldDirections.has('w'));
+    if(dx||dy){
+      const length=Math.hypot(dx,dy),vx=dx/length*94*dt,vy=dy/length*94*dt;
+      if(clearPath(state.room,p,{x:p.x+vx,y:p.y})){p.x+=vx;moved=true;}
+      if(clearPath(state.room,p,{x:p.x,y:p.y+vy})){p.y+=vy;moved=true;}
+    }else if(target){
+      if(!routeGoal||routeRoom!==state.room||(Math.hypot(target.x-routeGoal.x,target.y-routeGoal.y)>5&&time>=nextRouteAt)){
+        route=routeTo(state.room,p,target);routeGoal={...target};routeRoom=state.room;nextRouteAt=time+100;
+      }
+      while(route.length&&Math.hypot(route[0].x-p.x,route[0].y-p.y)<.5)route.shift();
+      if(route.length){const next=route[0],distance=Math.hypot(next.x-p.x,next.y-p.y),step=Math.min(distance,94*dt),destination={x:p.x+(next.x-p.x)/distance*step,y:p.y+(next.y-p.y)/distance*step};
+        if(clearPath(state.room,p,destination)){p.x=destination.x;p.y=destination.y;moved=true;}else{routeGoal=null;}
+      }
+      if(pendingInteraction&&pendingInteraction.room===state.room&&Math.hypot(p.x-pendingInteraction.object.x,p.y-pendingInteraction.object.y)<=39){const object=pendingInteraction.object;pendingInteraction=null;target=null;interact(object);}
     }
   }
   if(running){
+    const approach=(current,goal,speed)=>reduced?goal:current+Math.max(-speed*dt,Math.min(speed*dt,goal-current));
+    visual.water=approach(visual.water,state.flags.drained?0:1,.75);visual.power=approach(visual.power,state.flags.generator?1:0,1.5);
+    visual.wheel+=reduced?0:dt*visual.power*2.5;
+    visual.shutters=visual.shutters.map((v,i)=>approach(v,state.flags.shutters||state.instruments.shutters.includes(i+1)?1:0,4));
     ctx.fillStyle='#08151a';ctx.fillRect(0,0,view.width,view.height);
     // Draw the rock field beyond the chamber edges so every aspect ratio fills the window.
     for(let x=0;x<view.width;x+=48)for(let y=0;y<view.height;y+=40){ctx.fillStyle=(Math.sin(x*7+y*13)>.4)?'#102128':'#0a1920';ctx.fillRect(x+2,y+2,43,34);}
@@ -316,12 +407,12 @@ function tick(time){
       const p=worldToScreen(0,room*H,view,cameraY),height=H*view.scale;
       if(p.y+height<0||p.y>view.height)continue;
       const active=room===state.room,renderState=active?state:{...state,room};
-      drawFrame(pc,roomScene(room),renderState,time/1000,active?near:null,active?pointer:null,active&&moved,images,reduced,active);
+      drawFrame(pc,roomScene(room),renderState,time/1000,active?near:null,active?pointer:null,active&&moved,images,reduced,active,visual);
       ctx.drawImage(pixels,p.x,p.y,W*view.scale,height);
     }
     drawLightPath(ctx,view,cameraY,state,lightAim,adjustingLight);
     if(adjustingLight)updateLightControls();
-    if(!dialog.open&&!busy&&pointer&&time>scrollingUntil){const o=objectUnder(pointer);if(o){const p=worldToScreen(o.x,state.room*H+o.y-o.h/2-10,view,cameraY);$('hoverLabel').hidden=false;$('hoverLabel').innerHTML=`${o.label}<small>${Math.hypot(o.x-state.player.x,o.y-state.player.y)<=42?'CLICK':'MOVE CLOSER'}</small>`;$('hoverLabel').style.left=`${Math.max(120,Math.min(view.width-120,p.x))}px`;$('hoverLabel').style.top=`${Math.max(45,p.y)}px`;}else $('hoverLabel').hidden=true;}else $('hoverLabel').hidden=true;
+    if(!dialog.open&&!busy&&pointer&&time>scrollingUntil){const o=objectUnder(pointer);if(o){const p=worldToScreen(o.x,state.room*H+o.y-o.h/2-10,view,cameraY);$('hoverLabel').hidden=false;$('hoverLabel').innerHTML=`${o.label}<small>${Math.hypot(o.x-state.player.x,o.y-state.player.y)<=42?'CLICK TO INVESTIGATE':'CLICK TO APPROACH'}</small>`;$('hoverLabel').style.left=`${Math.max(120,Math.min(view.width-120,p.x))}px`;$('hoverLabel').style.top=`${Math.max(45,p.y)}px`;}else $('hoverLabel').hidden=true;}else $('hoverLabel').hidden=true;
     $('travelPrompt').hidden=dialog.open;
     $('travelPrompt').textContent=cameraY<1?(lastUnlocked(state)>0?'SCROLL DOWN ↓ · THE DESCENT CONTINUES':'↓ SOLVE THE SEAL TO GO DEEPER'):cameraY>=lastUnlocked(state)*H-1?'↑ SCROLL UP TO REVISIT EARLIER ROOMS':'↑ RETURN · SCROLL TO EXPLORE · DESCEND ↓';
     $('scrollMarker').style.top=`${cameraY/(H*4)*100}%`;
@@ -331,5 +422,5 @@ function tick(time){
 }
 for(const name of ['dome','archive','pump','lens','beacon','explorer']){const image=new Image();image.src=`./assets/${name}.webp`;image.onload=()=>{images[name]=image;if(running)rebuildScene();};}
 // Read-only observability helps verify movement and progression without adding cheat controls.
-Object.defineProperty(window,'observatory',{value:Object.freeze({get state(){return structuredClone(state);},get running(){return running;},get camera(){return{scrollY:cameraY,...view};},get light(){return{adjusting:adjustingLight,aim:lightAim};}})});
+Object.defineProperty(window,'observatory',{value:Object.freeze({get state(){return structuredClone(state);},get running(){return running;},get camera(){return{scrollY:cameraY,...view};},get light(){return{adjusting:adjustingLight,aim:lightAim};},get instrument(){return activeInstrument?.type??null;},get effects(){return{water:visual.water,power:visual.power,shutters:[...visual.shutters]};}})});
 updateUI();requestAnimationFrame(tick);
