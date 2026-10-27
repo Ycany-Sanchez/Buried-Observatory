@@ -135,6 +135,7 @@ export function drawFrame(c,scene,s,t,near,target,moving,images,reduced,showExpl
   if(s.room===1&&s.flags.beamAligned){glow(c,370,100,47,'#f4d8953a');}
   if(s.room===2){
     const phase=reduced?0:t,level=visual.water,power=visual.power;
+    const knockAge=t-(visual.knockAt??-100);if(knockAge>=0&&knockAge<1.4){for(let i=0;i<3;i++){const age=knockAge-i*.32;if(age>=0&&age<.45){c.save();c.globalAlpha=1-age/.45;circle(c,75,105,reduced?9:6+age*24,'#d9c394');c.restore();}}}
     for(let i=0;i<16;i++){const yy=67+((i*13+phase*(power*18+3))%180);rect(c,408,yy,2,4,'#91aaa057');}
     for(let i=0;i<8;i++){const angle=visual.wheel+i*Math.PI/4;line(c,294,127,294+Math.cos(angle)*20,127+Math.sin(angle)*20,power>.1?'#c2b47c':'#8c835d',2);}
     // The waterline falls to expose a deep basin; the rim remains impassable.

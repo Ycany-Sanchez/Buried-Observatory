@@ -243,14 +243,17 @@ const SAVE_KEY = 'buried-observatory:v1';
 const SYMBOLS = ['crescent', 'star', 'sun'];
 const ROOM_NAMES = ['Broken Dome', 'The Archive', 'Pump Room', 'Lens Chamber', 'Buried Beacon'];
 const NOTES = {
-  letter: { title: 'A letter from Elian', room: 'Before the descent', text: 'If I am not back by morning, follow the old observatory stairs. Bring your lantern. I think we were wrong about this place. It was never watching the stars. — Elian' },
+  letter: { title: 'A letter from Elian', room: 'Before the descent', text: 'If I am not back by morning, follow the old observatory stairs. Bring your lantern. I found a passage the old charts leave blank. — Elian' },
+  trail: { title: 'A fresh trail', room: 'Broken Dome', text: 'Elian’s initials are stitched inside the satchel. Its leather is still supple. Fresh bootprints cut through the dust toward the southern stairs; the prints on the return path are much older.' },
   mural: { title: 'The celestial procession', room: 'Broken Dome', text: 'Three figures are carved around the dome, in this order: CRESCENT → STAR → SUN. Beneath them: “As above, the first door remembers.”' },
   reflection: { title: 'Maintenance memorandum', room: 'The Archive', text: 'To the keeper of the lower instruments: the sky is read from beneath. Reverse the celestial procession when setting the water regulator. The Archive door uses the original order.' },
-  mentor: { title: 'A page in Elian’s hand', room: 'The Archive', text: 'The “telescope” is a transmitter. Its light travels down, not up. I took shelter beyond the shutters when the water rose. If you restore the beacon, someone on the surface will see us. The projection prism is still in the Lens Chamber. — E.' },
+  mentor: { title: 'A page in Elian’s hand', room: 'The Archive', text: 'Water has cut off the lower passage. I’ve gone ahead to find a dry ledge. The instruments below don’t match the charts. There must be another way through. — E.' },
+  knock: { title: 'Three taps in the pipes', room: 'Pump Room', text: 'Three measured taps. A pause. Then three more. The sound travels up the pipes from somewhere deeper. Too deliberate to be falling stone.' },
   plaque: { title: 'The latched sluice', room: 'Pump Room', text: 'DRAIN first. Once the lower chamber is empty, the sluice latches permanently. Water may then be routed to the GENERATOR without flooding the chamber again. Keep the beacon turbine supplied.' },
   prism: { title: 'A light without a source', room: 'Lens Chamber', text: 'A triangular prism rests inside the lens housing. Its brass foot matches the empty socket of the projector in the Broken Dome. A brass mirror beside the Dome’s southern stairs directs its beam into the Archive. Four numbered shutters surround the southern seal.' },
   light: { title: 'One instrument, two floors', room: 'Between the Dome and Archive', text: 'The Dome’s shaft mirror and the silver receiver in the Archive belong to one instrument. View both floors together, then turn the mirror until the beam meets the receiver. The brass catch holds the alignment once it is set.' },
   projection: { title: 'Writing in the light', room: 'The Archive', text: 'The restored beam exposes silver lettering on the blank wall: “For the keeper below: open the shutters 2 → 4 → 1 → 3.” A drawing connects the light, the waterwheel, and the final seal.' },
+  diagram: { title: 'An unfinished circuit', room: 'Lens Chamber', text: 'Three unfinished channels converge beneath the chamber: a beam of light, a turning waterwheel, and four shutters. The drawing continues beyond the edge of the page. Whatever the instrument does, its light belongs below.' },
   reunion: { title: 'What the observatory was for', room: 'Buried Beacon', text: 'Elian is alive. The buried lens was built to send a signal through the mountain: a way home for anyone lost in the dark. The stars on its walls were instructions, not observations.' }
 };
 function freshState() {
@@ -300,16 +303,24 @@ function applyAction(original, action) {
   const s = structuredClone(original);
   const finish = (ok, message) => ({ state: s, ok, message });
   const note = id => { if (!s.journal.includes(id)) s.journal.push(id); };
+  if(action.type==='enter_room'){
+    if(s.room===2&&lastUnlocked(s)>=2&&!s.flags.finished&&!s.flags.beaconLit&&!s.journal.includes('knock')){
+      note('knock');return {...finish(true,'Three measured taps travel up the pipes. A pause. Then three more. Kept in your field journal.'),discovery:'knock'};
+    }
+    return finish(false,'');
+  }
   if (action.type === 'align_beam') {
     if (!s.flags.projector || (s.room !== 0 && s.room !== 1)) return finish(false, 'The prism must be installed in the Dome before you can aim its light.');
     if (!lightAligned(action.aim, action.scroll, action.view)) return finish(false, 'Keep the upstairs mirror and downstairs receiver in view, and aim the beam into the receiver.');
     s.flags.beamAligned = true; note('light');
     return finish(true, 'The brass catch clicks. Light fills the Archive receiver, revealing silver writing on the wall below.');
   }
-  const rooms = { inspect_mural: 0, solve_entry: 0, restore_projector: 0, take_key: 1, inspect_reflection: 1, inspect_mentor: 1, inspect_wall: 1, unlock_pump: 1, inspect_plaque: 2, solve_pump: 2, route_generator: 2, collect_prism: 3, solve_shutters: 3, meet_mentor: 4, finish: 4 };
+  const rooms = { inspect_mural: 0, inspect_satchel:0, solve_entry: 0, restore_projector: 0, take_key: 1, inspect_reflection: 1, inspect_mentor: 1, inspect_wall: 1, unlock_pump: 1, inspect_plaque: 2, solve_pump: 2, route_generator: 2, collect_prism: 3, inspect_diagram:3, solve_shutters: 3, meet_mentor: 4, finish: 4 };
   if (!(action.type in rooms) || s.room !== rooms[action.type]) return finish(false, 'You need to be beside the mechanism to use it.');
   switch (action.type) {
     case 'inspect_mural': note('mural'); return finish(true, NOTES.mural.text);
+    case 'inspect_satchel': note('trail'); return finish(true, NOTES.trail.text);
+    case 'inspect_diagram': note('diagram'); return finish(true, NOTES.diagram.text);
     case 'inspect_reflection': note('reflection'); return finish(true, NOTES.reflection.text);
     case 'inspect_mentor': note('mentor'); return finish(true, NOTES.mentor.text);
     case 'inspect_plaque': note('plaque'); return finish(true, NOTES.plaque.text);
@@ -386,7 +397,7 @@ const ROOMS = [
     { id: 'projector', x: 370, y: 112, w: 24, h: 25, label: 'Moonlight projector', kind: 'projector', action: 'restore_projector' },
     { id: 'entrySeal', x: 196, y: 258, w: 23, h: 20, label: 'Celestial seal', kind: 'seal', puzzle: 'entry' },
     { id: 'shaftMirror', x: 330, y: 258, w: 22, h: 20, label: 'Shaft mirror', kind: 'mirror' },
-    { id: 'satchel', x: 96, y: 225, w: 19, h: 16, label: 'Elian’s satchel', kind: 'satchel', text: 'Elian’s initials are stitched inside. A lantern-shaped imprint rests in the dust, and a line of footprints leads to the southern stairs.' }
+    { id: 'satchel', x: 96, y: 225, w: 19, h: 16, label: 'Elian’s satchel', kind: 'satchel', action:'inspect_satchel' }
   ] },
   { name: 'The Archive', subtitle: 'Some words wait for light', depth: '12', color: '#bca078', objects: [
     { id: 'memo', x: 108, y: 110, w: 35, h: 24, label: 'Maintenance memorandum', kind: 'desk', action: 'inspect_reflection' },
@@ -404,7 +415,7 @@ const ROOMS = [
   { name: 'Lens Chamber', subtitle: 'A borrowed piece of moonlight', depth: '43', color: '#9a9cba', objects: [
     { id: 'prism', x: 240, y: 136, w: 31, h: 26, label: 'Projection prism', kind: 'prism', action: 'collect_prism' },
     { id: 'shutters', x: 351, y: 224, w: 46, h: 26, label: 'Numbered shutters', kind: 'shutters', puzzle: 'shutters' },
-    { id: 'diagram', x: 114, y: 115, w: 35, h: 25, label: 'Seal schematic', kind: 'mural', text: 'Three channels lead to the southern seal: a beam of light, a turning waterwheel, and four aligned shutters. Each channel has a small indicator.' }
+    { id: 'diagram', x: 114, y: 115, w: 35, h: 25, label: 'Unfinished circuit', kind: 'mural', action:'inspect_diagram' }
   ] },
   { name: 'Buried Beacon', subtitle: 'A way home through the dark', depth: '61', color: '#e0bd7b', objects: [
     { id: 'elian', x: 350, y: 155, w: 16, h: 20, label: 'Elian', kind: 'mentor', action: 'meet_mentor' },
@@ -628,6 +639,7 @@ function drawFrame(c,scene,s,t,near,target,moving,images,reduced,showExplorer=tr
   if(s.room===1&&s.flags.beamAligned){glow(c,370,100,47,'#f4d8953a');}
   if(s.room===2){
     const phase=reduced?0:t,level=visual.water,power=visual.power;
+    const knockAge=t-(visual.knockAt??-100);if(knockAge>=0&&knockAge<1.4){for(let i=0;i<3;i++){const age=knockAge-i*.32;if(age>=0&&age<.45){c.save();c.globalAlpha=1-age/.45;circle(c,75,105,reduced?9:6+age*24,'#d9c394');c.restore();}}}
     for(let i=0;i<16;i++){const yy=67+((i*13+phase*(power*18+3))%180);rect(c,408,yy,2,4,'#91aaa057');}
     for(let i=0;i<8;i++){const angle=visual.wheel+i*Math.PI/4;line(c,294,127,294+Math.cos(angle)*20,127+Math.sin(angle)*20,power>.1?'#c2b47c':'#8c835d',2);}
     // The waterline falls to expose a deep basin; the rim remains impassable.
@@ -744,6 +756,12 @@ function activateRoom(room) {
   state.room = room;
   state.player = safePosition(room, roomPositions.get(room) || { x: 240, y: 67 });
   target = null; pointer = null; updateUI(); save();
+  discoverRoom();
+}
+function discoverRoom(){
+  const result=applyAction(state,{type:'enter_room'});
+  if(!result.ok)return;
+  state=result.state;visual.knockAt=performance.now()/1000;updateUI();save();toast(result.message,6500);soundCue('knock');
 }
 function scrollDungeon(distance) {
   if (!running || dialog.open || busy) return;
@@ -908,7 +926,7 @@ function interact(o) {
   if(o.action==='take_key'&&state.flags.key)return description('The maintenance desk','The maintenance key is safely in your satchel.');
   if(o.action==='restore_projector'&&state.flags.projector)return description('A restored projector',state.flags.beamAligned?'The aligned beam lights the Archive wall below.':'Light reaches the shaft mirror beside the southern stairs. Adjust that mirror while viewing the Dome and Archive together.');
   const r=commit({type:o.action});
-  const noteIds={inspect_mural:'mural',inspect_reflection:'reflection',inspect_mentor:'mentor',inspect_plaque:'plaque',inspect_wall:'projection',collect_prism:'prism'};
+  const noteIds={inspect_mural:'mural',inspect_satchel:'trail',inspect_diagram:'diagram',inspect_reflection:'reflection',inspect_mentor:'mentor',inspect_plaque:'plaque',inspect_wall:'projection',collect_prism:'prism'};
   if(r.ok&&(o.action==='collect_prism'||o.action==='take_key'||o.action==='unlock_pump')){toast(r.message,5000);return;}
   if(r.ok&&noteIds[o.action])return notePanel(noteIds[o.action]);
   if(o.action==='meet_mentor')return description('Elian',r.message);
@@ -929,6 +947,7 @@ function start(continueSave=false) {
   route=[];routeGoal=null;pendingInteraction=null;heldDirections.clear();
   visual={water:state.flags.drained?0:1,power:state.flags.generator?1:0,shutters:[0,0,0,0].map(()=>state.flags.shutters?1:0),crank:0,wheel:0,pulse:null};
   $('startScreen').hidden=true;$('app').hidden=false;rebuildScene();resize();updateUI();save();
+  discoverRoom();
   if (!state.muted) setAudio();
   if (!continueSave) instructions(); else if(state.flags.finished) toast('Welcome back. The beacon is still burning.');
 }
@@ -1040,9 +1059,9 @@ function setAudio(){
 function chime(quiet=0){if(state.muted||!audio)return;const {context,master}=audio;const osc=context.createOscillator(),gain=context.createGain();osc.type='sine';osc.frequency.value=quiet?440:659.25;gain.gain.setValueAtTime(0,context.currentTime);gain.gain.linearRampToValueAtTime(quiet?.025:.05,context.currentTime+.01);gain.gain.exponentialRampToValueAtTime(.001,context.currentTime+.35);osc.connect(gain).connect(master);osc.start();osc.stop(context.currentTime+.4);}
 function soundCue(kind){
   if(state.muted||!audio)return;
-  const notes=kind==='wrong'?[145,130]:kind==='key'||kind==='prism'?[523.25,783.99,1046.5]:kind==='drained'||kind==='generator'?[110,164.81,220]:[329.63,493.88,659.25];
+  const notes=kind==='knock'?[220,220,220]:kind==='wrong'?[145,130]:kind==='key'||kind==='prism'?[523.25,783.99,1046.5]:kind==='drained'||kind==='generator'?[110,164.81,220]:[329.63,493.88,659.25];
   const {context,master}=audio;
-  notes.forEach((frequency,i)=>{const start=context.currentTime+i*.08,osc=context.createOscillator(),gain=context.createGain();osc.type=kind==='drained'?'triangle':'sine';osc.frequency.value=frequency;gain.gain.setValueAtTime(0,start);gain.gain.linearRampToValueAtTime(.035,start+.015);gain.gain.exponentialRampToValueAtTime(.001,start+.5);osc.connect(gain).connect(master);osc.start(start);osc.stop(start+.55);});
+  notes.forEach((frequency,i)=>{const start=context.currentTime+i*(kind==='knock'?.32:.08),osc=context.createOscillator(),gain=context.createGain();osc.type=kind==='drained'?'triangle':'sine';osc.frequency.value=frequency;gain.gain.setValueAtTime(0,start);gain.gain.linearRampToValueAtTime(.035,start+.015);gain.gain.exponentialRampToValueAtTime(.001,start+.5);osc.connect(gain).connect(master);osc.start(start);osc.stop(start+.55);});
 }
 function tick(time){
   const dt=Math.min((time-lastTime)/1000,.04)||0;lastTime=time;moved=false;

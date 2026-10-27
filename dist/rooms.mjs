@@ -14,7 +14,7 @@ export const ROOMS = [
     { id: 'projector', x: 370, y: 112, w: 24, h: 25, label: 'Moonlight projector', kind: 'projector', action: 'restore_projector' },
     { id: 'entrySeal', x: 196, y: 258, w: 23, h: 20, label: 'Celestial seal', kind: 'seal', puzzle: 'entry' },
     { id: 'shaftMirror', x: 330, y: 258, w: 22, h: 20, label: 'Shaft mirror', kind: 'mirror' },
-    { id: 'satchel', x: 96, y: 225, w: 19, h: 16, label: 'Elian’s satchel', kind: 'satchel', text: 'Elian’s initials are stitched inside. A lantern-shaped imprint rests in the dust, and a line of footprints leads to the southern stairs.' }
+    { id: 'satchel', x: 96, y: 225, w: 19, h: 16, label: 'Elian’s satchel', kind: 'satchel', action:'inspect_satchel' }
   ] },
   { name: 'The Archive', subtitle: 'Some words wait for light', depth: '12', color: '#bca078', objects: [
     { id: 'memo', x: 108, y: 110, w: 35, h: 24, label: 'Maintenance memorandum', kind: 'desk', action: 'inspect_reflection' },
@@ -32,7 +32,7 @@ export const ROOMS = [
   { name: 'Lens Chamber', subtitle: 'A borrowed piece of moonlight', depth: '43', color: '#9a9cba', objects: [
     { id: 'prism', x: 240, y: 136, w: 31, h: 26, label: 'Projection prism', kind: 'prism', action: 'collect_prism' },
     { id: 'shutters', x: 351, y: 224, w: 46, h: 26, label: 'Numbered shutters', kind: 'shutters', puzzle: 'shutters' },
-    { id: 'diagram', x: 114, y: 115, w: 35, h: 25, label: 'Seal schematic', kind: 'mural', text: 'Three channels lead to the southern seal: a beam of light, a turning waterwheel, and four aligned shutters. Each channel has a small indicator.' }
+    { id: 'diagram', x: 114, y: 115, w: 35, h: 25, label: 'Unfinished circuit', kind: 'mural', action:'inspect_diagram' }
   ] },
   { name: 'Buried Beacon', subtitle: 'A way home through the dark', depth: '61', color: '#e0bd7b', objects: [
     { id: 'elian', x: 350, y: 155, w: 16, h: 20, label: 'Elian', kind: 'mentor', action: 'meet_mentor' },

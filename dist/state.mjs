@@ -4,14 +4,17 @@ export const SAVE_KEY = 'buried-observatory:v1';
 export const SYMBOLS = ['crescent', 'star', 'sun'];
 export const ROOM_NAMES = ['Broken Dome', 'The Archive', 'Pump Room', 'Lens Chamber', 'Buried Beacon'];
 export const NOTES = {
-  letter: { title: 'A letter from Elian', room: 'Before the descent', text: 'If I am not back by morning, follow the old observatory stairs. Bring your lantern. I think we were wrong about this place. It was never watching the stars. — Elian' },
+  letter: { title: 'A letter from Elian', room: 'Before the descent', text: 'If I am not back by morning, follow the old observatory stairs. Bring your lantern. I found a passage the old charts leave blank. — Elian' },
+  trail: { title: 'A fresh trail', room: 'Broken Dome', text: 'Elian’s initials are stitched inside the satchel. Its leather is still supple. Fresh bootprints cut through the dust toward the southern stairs; the prints on the return path are much older.' },
   mural: { title: 'The celestial procession', room: 'Broken Dome', text: 'Three figures are carved around the dome, in this order: CRESCENT → STAR → SUN. Beneath them: “As above, the first door remembers.”' },
   reflection: { title: 'Maintenance memorandum', room: 'The Archive', text: 'To the keeper of the lower instruments: the sky is read from beneath. Reverse the celestial procession when setting the water regulator. The Archive door uses the original order.' },
-  mentor: { title: 'A page in Elian’s hand', room: 'The Archive', text: 'The “telescope” is a transmitter. Its light travels down, not up. I took shelter beyond the shutters when the water rose. If you restore the beacon, someone on the surface will see us. The projection prism is still in the Lens Chamber. — E.' },
+  mentor: { title: 'A page in Elian’s hand', room: 'The Archive', text: 'Water has cut off the lower passage. I’ve gone ahead to find a dry ledge. The instruments below don’t match the charts. There must be another way through. — E.' },
+  knock: { title: 'Three taps in the pipes', room: 'Pump Room', text: 'Three measured taps. A pause. Then three more. The sound travels up the pipes from somewhere deeper. Too deliberate to be falling stone.' },
   plaque: { title: 'The latched sluice', room: 'Pump Room', text: 'DRAIN first. Once the lower chamber is empty, the sluice latches permanently. Water may then be routed to the GENERATOR without flooding the chamber again. Keep the beacon turbine supplied.' },
   prism: { title: 'A light without a source', room: 'Lens Chamber', text: 'A triangular prism rests inside the lens housing. Its brass foot matches the empty socket of the projector in the Broken Dome. A brass mirror beside the Dome’s southern stairs directs its beam into the Archive. Four numbered shutters surround the southern seal.' },
   light: { title: 'One instrument, two floors', room: 'Between the Dome and Archive', text: 'The Dome’s shaft mirror and the silver receiver in the Archive belong to one instrument. View both floors together, then turn the mirror until the beam meets the receiver. The brass catch holds the alignment once it is set.' },
   projection: { title: 'Writing in the light', room: 'The Archive', text: 'The restored beam exposes silver lettering on the blank wall: “For the keeper below: open the shutters 2 → 4 → 1 → 3.” A drawing connects the light, the waterwheel, and the final seal.' },
+  diagram: { title: 'An unfinished circuit', room: 'Lens Chamber', text: 'Three unfinished channels converge beneath the chamber: a beam of light, a turning waterwheel, and four shutters. The drawing continues beyond the edge of the page. Whatever the instrument does, its light belongs below.' },
   reunion: { title: 'What the observatory was for', room: 'Buried Beacon', text: 'Elian is alive. The buried lens was built to send a signal through the mountain: a way home for anyone lost in the dark. The stars on its walls were instructions, not observations.' }
 };
 export function freshState() {
@@ -61,16 +64,24 @@ export function applyAction(original, action) {
   const s = structuredClone(original);
   const finish = (ok, message) => ({ state: s, ok, message });
   const note = id => { if (!s.journal.includes(id)) s.journal.push(id); };
+  if(action.type==='enter_room'){
+    if(s.room===2&&lastUnlocked(s)>=2&&!s.flags.finished&&!s.flags.beaconLit&&!s.journal.includes('knock')){
+      note('knock');return {...finish(true,'Three measured taps travel up the pipes. A pause. Then three more. Kept in your field journal.'),discovery:'knock'};
+    }
+    return finish(false,'');
+  }
   if (action.type === 'align_beam') {
     if (!s.flags.projector || (s.room !== 0 && s.room !== 1)) return finish(false, 'The prism must be installed in the Dome before you can aim its light.');
     if (!lightAligned(action.aim, action.scroll, action.view)) return finish(false, 'Keep the upstairs mirror and downstairs receiver in view, and aim the beam into the receiver.');
     s.flags.beamAligned = true; note('light');
     return finish(true, 'The brass catch clicks. Light fills the Archive receiver, revealing silver writing on the wall below.');
   }
-  const rooms = { inspect_mural: 0, solve_entry: 0, restore_projector: 0, take_key: 1, inspect_reflection: 1, inspect_mentor: 1, inspect_wall: 1, unlock_pump: 1, inspect_plaque: 2, solve_pump: 2, route_generator: 2, collect_prism: 3, solve_shutters: 3, meet_mentor: 4, finish: 4 };
+  const rooms = { inspect_mural: 0, inspect_satchel:0, solve_entry: 0, restore_projector: 0, take_key: 1, inspect_reflection: 1, inspect_mentor: 1, inspect_wall: 1, unlock_pump: 1, inspect_plaque: 2, solve_pump: 2, route_generator: 2, collect_prism: 3, inspect_diagram:3, solve_shutters: 3, meet_mentor: 4, finish: 4 };
   if (!(action.type in rooms) || s.room !== rooms[action.type]) return finish(false, 'You need to be beside the mechanism to use it.');
   switch (action.type) {
     case 'inspect_mural': note('mural'); return finish(true, NOTES.mural.text);
+    case 'inspect_satchel': note('trail'); return finish(true, NOTES.trail.text);
+    case 'inspect_diagram': note('diagram'); return finish(true, NOTES.diagram.text);
     case 'inspect_reflection': note('reflection'); return finish(true, NOTES.reflection.text);
     case 'inspect_mentor': note('mentor'); return finish(true, NOTES.mentor.text);
     case 'inspect_plaque': note('plaque'); return finish(true, NOTES.plaque.text);

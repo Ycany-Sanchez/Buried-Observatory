@@ -77,6 +77,12 @@ function activateRoom(room) {
   state.room = room;
   state.player = safePosition(room, roomPositions.get(room) || { x: 240, y: 67 });
   target = null; pointer = null; updateUI(); save();
+  discoverRoom();
+}
+function discoverRoom(){
+  const result=applyAction(state,{type:'enter_room'});
+  if(!result.ok)return;
+  state=result.state;visual.knockAt=performance.now()/1000;updateUI();save();toast(result.message,6500);soundCue('knock');
 }
 function scrollDungeon(distance) {
   if (!running || dialog.open || busy) return;
@@ -241,7 +247,7 @@ function interact(o) {
   if(o.action==='take_key'&&state.flags.key)return description('The maintenance desk','The maintenance key is safely in your satchel.');
   if(o.action==='restore_projector'&&state.flags.projector)return description('A restored projector',state.flags.beamAligned?'The aligned beam lights the Archive wall below.':'Light reaches the shaft mirror beside the southern stairs. Adjust that mirror while viewing the Dome and Archive together.');
   const r=commit({type:o.action});
-  const noteIds={inspect_mural:'mural',inspect_reflection:'reflection',inspect_mentor:'mentor',inspect_plaque:'plaque',inspect_wall:'projection',collect_prism:'prism'};
+  const noteIds={inspect_mural:'mural',inspect_satchel:'trail',inspect_diagram:'diagram',inspect_reflection:'reflection',inspect_mentor:'mentor',inspect_plaque:'plaque',inspect_wall:'projection',collect_prism:'prism'};
   if(r.ok&&(o.action==='collect_prism'||o.action==='take_key'||o.action==='unlock_pump')){toast(r.message,5000);return;}
   if(r.ok&&noteIds[o.action])return notePanel(noteIds[o.action]);
   if(o.action==='meet_mentor')return description('Elian',r.message);
@@ -262,6 +268,7 @@ function start(continueSave=false) {
   route=[];routeGoal=null;pendingInteraction=null;heldDirections.clear();
   visual={water:state.flags.drained?0:1,power:state.flags.generator?1:0,shutters:[0,0,0,0].map(()=>state.flags.shutters?1:0),crank:0,wheel:0,pulse:null};
   $('startScreen').hidden=true;$('app').hidden=false;rebuildScene();resize();updateUI();save();
+  discoverRoom();
   if (!state.muted) setAudio();
   if (!continueSave) instructions(); else if(state.flags.finished) toast('Welcome back. The beacon is still burning.');
 }
@@ -373,9 +380,9 @@ function setAudio(){
 function chime(quiet=0){if(state.muted||!audio)return;const {context,master}=audio;const osc=context.createOscillator(),gain=context.createGain();osc.type='sine';osc.frequency.value=quiet?440:659.25;gain.gain.setValueAtTime(0,context.currentTime);gain.gain.linearRampToValueAtTime(quiet?.025:.05,context.currentTime+.01);gain.gain.exponentialRampToValueAtTime(.001,context.currentTime+.35);osc.connect(gain).connect(master);osc.start();osc.stop(context.currentTime+.4);}
 function soundCue(kind){
   if(state.muted||!audio)return;
-  const notes=kind==='wrong'?[145,130]:kind==='key'||kind==='prism'?[523.25,783.99,1046.5]:kind==='drained'||kind==='generator'?[110,164.81,220]:[329.63,493.88,659.25];
+  const notes=kind==='knock'?[220,220,220]:kind==='wrong'?[145,130]:kind==='key'||kind==='prism'?[523.25,783.99,1046.5]:kind==='drained'||kind==='generator'?[110,164.81,220]:[329.63,493.88,659.25];
   const {context,master}=audio;
-  notes.forEach((frequency,i)=>{const start=context.currentTime+i*.08,osc=context.createOscillator(),gain=context.createGain();osc.type=kind==='drained'?'triangle':'sine';osc.frequency.value=frequency;gain.gain.setValueAtTime(0,start);gain.gain.linearRampToValueAtTime(.035,start+.015);gain.gain.exponentialRampToValueAtTime(.001,start+.5);osc.connect(gain).connect(master);osc.start(start);osc.stop(start+.55);});
+  notes.forEach((frequency,i)=>{const start=context.currentTime+i*(kind==='knock'?.32:.08),osc=context.createOscillator(),gain=context.createGain();osc.type=kind==='drained'?'triangle':'sine';osc.frequency.value=frequency;gain.gain.setValueAtTime(0,start);gain.gain.linearRampToValueAtTime(.035,start+.015);gain.gain.exponentialRampToValueAtTime(.001,start+.5);osc.connect(gain).connect(master);osc.start(start);osc.stop(start+.55);});
 }
 function tick(time){
   const dt=Math.min((time-lastTime)/1000,.04)||0;lastTime=time;moved=false;
