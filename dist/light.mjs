@@ -21,11 +21,11 @@ export function lightInView(scroll, view) {
   if (!view || ![scroll, view.scale, view.x, view.y, view.width, view.height].every(Number.isFinite) || view.scale <= 0) return false;
   // A deliberate between-floor view is part of the mechanism, even on tall displays.
   if (scroll < 64 || scroll > 256) return false;
+  const panels=view.obstructions??(view.obstruction?[view.obstruction]:[]);
+  if(!Array.isArray(panels)||panels.some(panel=>!panel||![panel.left,panel.right,panel.top,panel.bottom].every(Number.isFinite)))return false;
   return [LIGHT_PATH.source, LIGHT_PATH.receiver].every(p => {
     const x = view.x + p.x * view.scale, y = view.y + (p.y - scroll) * view.scale;
-    const panel = view.obstruction;
-    if (panel && ![panel.left,panel.right,panel.top,panel.bottom].every(Number.isFinite)) return false;
-    const covered = panel && x+16>panel.left && x-16<panel.right && y+16>panel.top && y-16<panel.bottom;
+    const covered=panels.some(panel=>x+16>panel.left&&x-16<panel.right&&y+16>panel.top&&y-16<panel.bottom);
     return !covered && x >= 16 && x <= view.width - 16 && y >= 72 && y <= view.height - 36;
   });
 }

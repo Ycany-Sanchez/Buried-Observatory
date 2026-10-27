@@ -10,6 +10,7 @@ const chromeArgs=['--headless=new','--disable-gpu','--no-first-run','--no-defaul
 if(process.env.OBSERVATORY_QA_RESTRICTED==='1')chromeArgs.unshift('--no-sandbox');
 const chrome=spawn(process.env.OBSERVATORY_QA_CHROME||'C:/Program Files/Google/Chrome/Application/chrome.exe',chromeArgs,{stdio:['ignore','ignore','pipe'],windowsHide:true});
 const lightOnly=process.argv.includes('--light-only');
+const journalOnly=process.argv.includes('--journal-only');
 const instrumentsOnly=process.argv.includes('--instruments-only'),reducedMotion=process.argv.includes('--reduced-motion');
 chrome.stderr.on('data',data=>console.error(String(data).slice(0,1000)));chrome.on('exit',(code)=>console.log('Browser exit '+code));
 let ws,id=0;const pending=new Map(),errors=[];const keepAlive=setInterval(()=>{},1000);
@@ -30,9 +31,9 @@ try{
   await send('Page.navigate',{url:process.argv.includes('--portable')?pathToFileURL(path.join(root,'play.html')).href:'http://127.0.0.1:4173'});await sleep(1400);
   if(!process.argv.includes('--resume-check')){await evaluate("localStorage.clear();location.reload()");await sleep(1000);}
   if(lightOnly){await evaluate(`localStorage.setItem('buried-observatory:v1',JSON.stringify({version:1,room:0,player:{x:330,y:230},flags:{archive:true,key:true,pump:true,drained:true,prism:true,projector:true,beamAligned:false},journal:['letter','mural','reflection','mentor','plaque','prism','light'],hints:{},muted:true}));location.reload()`);await sleep(1000);}
-  if(instrumentsOnly){await evaluate(`localStorage.setItem('buried-observatory:v1',JSON.stringify({version:1,room:2,player:{x:160,y:111},flags:{archive:true,key:true,pump:true},journal:['letter','mural','reflection','plaque'],hints:{},muted:true}));location.reload()`);await sleep(700);}
+  if(instrumentsOnly||journalOnly){await evaluate(`localStorage.setItem('buried-observatory:v1',JSON.stringify({version:1,room:2,player:{x:160,y:111},flags:{archive:true,key:true,pump:true},journal:['letter','mural','reflection','plaque'],hints:{},muted:true}));location.reload()`);await sleep(700);}
   await screenshot('01-title');
-  if(process.argv.includes('--resume-check')||lightOnly||instrumentsOnly)await click('#continueButton');else{await click('#beginButton');await click('[data-close]');}
+  if(process.argv.includes('--resume-check')||lightOnly||instrumentsOnly||journalOnly)await click('#continueButton');else{await click('#beginButton');await click('[data-close]');}
   await sleep(300);await screenshot('02-broken-dome');
   assert.equal(await evaluate('window.observatory.running'),true);
   assert.equal(await evaluate('(()=>{const r=document.querySelector("#game").getBoundingClientRect();return r.x===0&&r.y===0&&r.width===innerWidth&&r.height===innerHeight})()'),true,'Dungeon fills the browser viewport');
@@ -40,8 +41,29 @@ try{
   if(process.argv.includes('--hidpi-only')){
     await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});await sleep(200);await screenshot('17-hidpi-to-desktop');
   }
-  if(!process.argv.includes('--resume-check')&&!lightOnly&&!instrumentsOnly){const before=await evaluate('JSON.stringify(window.observatory.state.player)');await click('#hintButton');for(let i=0;i<3;i++)await click('#nextHint');assert.ok((await evaluate('document.querySelector("#hintText").textContent')).includes('CRESCENT'));await click('[data-close]');assert.equal(await evaluate('JSON.stringify(window.observatory.state.player)'),before);await click('#journalButton');assert.equal(await evaluate('document.querySelectorAll(".journal-entry").length'),1);await click('[data-close]');console.log('PASS progressive hints, journal, overlay blocks movement');}
+  if(!process.argv.includes('--resume-check')&&!lightOnly&&!instrumentsOnly&&!journalOnly){const before=await evaluate('JSON.stringify(window.observatory.state.player)');await click('#hintButton');for(let i=0;i<3;i++)await click('#nextHint');assert.ok((await evaluate('document.querySelector("#hintText").textContent')).includes('CRESCENT'));await click('[data-close]');assert.equal(await evaluate('JSON.stringify(window.observatory.state.player)'),before);await click('#journalButton');assert.equal(await evaluate('document.querySelectorAll(".journal-entry").length'),1);await click('[data-close]');console.log('PASS progressive hints, journal, overlay blocks movement');}
   if(process.argv.includes('--resume-check')){await click('#journalButton');await screenshot('journal-check');console.log(await evaluate('JSON.stringify({running:window.observatory.running,dialog:document.querySelector("#dialog").open,entries:document.querySelectorAll(".journal-entry").length,notes:window.observatory.state.journal})'));await click('[data-close]');await click('#soundButton');assert.equal(await evaluate('window.observatory.state.muted'),false);await click('#soundButton');}
+  if(journalOnly){
+    const pump=await evaluate('(()=>{const v=window.observatory.camera;return{x:v.x+160*v.scale,y:v.y+(640+142-v.scrollY)*v.scale}})()');
+    await send('Input.dispatchMouseEvent',{type:'mouseMoved',...pump});await send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...pump});await send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...pump});
+    await click('[data-dial="0"]');const draft=await evaluate('window.observatory.state.instruments.pump');
+    await click('#puzzleJournal');await click('[data-note="mural"]');
+    assert.equal(await evaluate('!!document.querySelector("#journalPage svg")'),true);
+    await click('#pinJournalNote');await click('[data-close]');
+    assert.equal(await evaluate('window.observatory.state.pinnedNote'),'mural');assert.equal(await evaluate('window.observatory.instrument'),'pump');
+    assert.deepEqual(await evaluate('window.observatory.state.instruments.pump'),draft);await screenshot('18-pinned-clue-desktop');
+    await click('#journalButton');await click('[data-note="plaque"]');await click('#pinJournalNote');await click('[data-close]');
+    assert.equal(await evaluate('window.observatory.state.pinnedNote'),'plaque');
+    await send('Emulation.setDeviceMetricsOverride',{width:390,height:568,deviceScaleFactor:1,mobile:true});await sleep(200);
+    assert.equal(await evaluate('getComputedStyle(document.querySelector(".pinned-content")).display'),'none');
+    await click('#readPinned');assert.equal(await evaluate('document.querySelector("#dialog").open'),true);await click('#noteDone');
+    assert.deepEqual(await evaluate('window.observatory.state.instruments.pump'),draft);await screenshot('19-pinned-clue-phone');
+    await send('Page.reload');await sleep(700);await click('#continueButton');
+    assert.equal(await evaluate('window.observatory.state.pinnedNote'),'plaque');assert.deepEqual(await evaluate('window.observatory.state.instruments.pump'),draft);
+    await click('#unpinNote');assert.equal(await evaluate('window.observatory.state.pinnedNote'),null);
+    await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});await sleep(150);
+    console.log('PASS illustrated journal, replacing/unpinning clues, phone reference, drafts and saved pin');
+  }
   if(process.argv.includes('--movement-only')){
     const toScreen=async(x,y)=>evaluate(`(()=>{const v=window.observatory.camera;return{x:v.x+${x}*v.scale,y:v.y+(${y}-v.scrollY)*v.scale}})()`);
     await send('Input.dispatchMouseEvent',{type:'mouseMoved',...await toScreen(240,170)});

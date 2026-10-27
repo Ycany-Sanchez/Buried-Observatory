@@ -99,3 +99,34 @@ dialog{z-index:20}
   .depth-rail{right:16px}.depth-track{height:95px}.controls-strip{gap:12px;font-size:8px}.controls-strip .icon{display:none}.controls-strip b{font-size:7px}
   .expedition-details{grid-template-columns:1fr;gap:22px}
 }
+
+/* Field notes share the observatory's ink and brass, with room for drawings. */
+dialog.journal-dialog{width:min(900px,calc(100% - 32px))}
+.journal-spread{display:grid;grid-template-columns:minmax(190px,.85fr) minmax(0,1.5fr);gap:24px;border-top:1px solid var(--line);padding-top:20px}
+.journal-spread>.journal-list{max-height:min(49svh,470px);overflow:auto;scrollbar-color:var(--dim) var(--panel)}
+.journal-spread .journal-entry{border:0;border-bottom:1px solid var(--line);border-left:2px solid transparent;padding:12px 10px;line-height:1.5;gap:9px}
+.journal-entry[aria-current="true"]{border-left-color:var(--gold);background:#1b2d2d;color:#e9d4a9}
+.journal-page{min-width:0;border-left:1px solid var(--line);padding:4px 0 4px 24px}
+.journal-page>.eyebrow{font-size:8px}
+.journal-page h3{font:400 28px/1.15 var(--serif);margin:8px 0 18px;color:var(--ink)}
+.journal-copy{font:400 21px/1.55 var(--serif);color:#d9d4bd;margin:20px 0}
+.clue-sketch{margin:14px 0;color:#c2b48b;border-top:1px dashed #64725b66;border-bottom:1px dashed #64725b66;padding:10px 0}
+.clue-sketch svg{width:100%;height:auto;max-height:190px;display:block}
+.clue-sketch text{fill:currentColor;stroke:none;font:8px var(--mono);letter-spacing:1px}
+.clue-sketch .sketch-number{font:23px var(--mono)}
+.clue-sketch figcaption{font:8px/1.6 var(--mono);letter-spacing:1px;color:#8e9c88;text-align:center;margin:4px 0}
+.pinned-clue{position:absolute;top:210px;left:24px;width:250px;max-height:calc(100svh - 260px);overflow:auto;z-index:4;background:#0d1b20f5;border:1px solid #536052;border-left:2px solid var(--gold);padding:10px 12px;scrollbar-color:var(--dim) var(--panel)}
+.pinned-heading{display:flex;align-items:flex-start;gap:6px}
+.pinned-read{min-width:0;flex:1;background:transparent;border:0;text-align:left;padding:4px 0;color:var(--ink)}
+.pinned-read small{display:block;font:7px/1.6 var(--mono);letter-spacing:1.2px;color:var(--gold)}
+.pinned-read span{display:block;font:20px/1.15 var(--serif);margin-top:5px}
+.pinned-content .clue-sketch{margin:10px 0}
+.pinned-content>p{font-size:12px;line-height:1.65;color:#c4cbbb;max-height:10em;overflow:auto;margin:12px 0 3px}
+@media(max-width:700px){.journal-spread{grid-template-columns:1fr;gap:14px}.journal-spread>.journal-list{max-height:145px}.journal-page{border-left:0;border-top:1px solid var(--line);padding:17px 0 0}.journal-page h3{font-size:25px}.journal-copy{font-size:20px}}
+@media(max-width:800px),(max-height:600px){
+  .pinned-clue{top:190px;left:18px;width:calc(100% - 36px);max-height:none;padding:0 6px 0 12px}
+  .pinned-content{display:none}.pinned-heading{align-items:center}.pinned-heading .close-button{width:40px;height:40px;flex-shrink:0}
+  .pinned-read{padding:5px 0}.pinned-read span{font:12px/1.4 var(--sans);margin:1px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .aiming-light .pinned-clue,.operating-instrument .pinned-clue{top:64px}
+}
+@media(max-height:600px){.pinned-clue{top:64px}}

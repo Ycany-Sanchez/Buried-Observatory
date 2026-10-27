@@ -18,7 +18,7 @@ export const NOTES = {
   reunion: { title: 'What the observatory was for', room: 'Buried Beacon', text: 'Elian is alive. The buried lens was built to send a signal through the mountain: a way home for anyone lost in the dark. The stars on its walls were instructions, not observations.' }
 };
 export function freshState() {
-  return { version: 1, room: 0, player: { x: 240, y: 86 }, flags: { archive: false, key: false, pump: false, drained: false, prism: false, projector: false, beamAligned: false, generator: false, shutters: false, finished: false }, journal: ['letter'], hints: {}, instruments:freshInstruments(), muted: true };
+  return { version: 1, room: 0, player: { x: 240, y: 86 }, flags: { archive: false, key: false, pump: false, drained: false, prism: false, projector: false, beamAligned: false, generator: false, shutters: false, finished: false }, journal: ['letter'], pinnedNote:null, hints: {}, instruments:freshInstruments(), muted: true };
 }
 export function lastUnlocked(s) {
   if (s.flags.projector && s.flags.beamAligned && s.flags.generator && s.flags.shutters) return 4;
@@ -46,6 +46,7 @@ export function restoreState(raw) {
       s.player = { x: Math.max(46, Math.min(434, data.player.x)), y: Math.max(48, Math.min(278, data.player.y)) };
     }
     s.journal = [...new Set(['letter', ...data.journal.filter(k => Object.hasOwn(NOTES, k))])];
+    s.pinnedNote=typeof data.pinnedNote==='string'&&s.journal.includes(data.pinnedNote)?data.pinnedNote:null;
     s.muted = data.muted !== false;
     s.instruments=restoreInstruments(data.instruments);
     if (data.hints && typeof data.hints === 'object') for (const [k, v] of Object.entries(data.hints)) if (Number.isInteger(v) && v >= 0 && v <= 3) s.hints[k] = v;
@@ -64,6 +65,10 @@ export function applyAction(original, action) {
   const s = structuredClone(original);
   const finish = (ok, message) => ({ state: s, ok, message });
   const note = id => { if (!s.journal.includes(id)) s.journal.push(id); };
+  if(action.type==='pin_note'){
+    if(action.id!==null&&(typeof action.id!=='string'||!s.journal.includes(action.id)))return finish(false,'Discover this page before pinning it.');
+    s.pinnedNote=action.id;return finish(true,action.id?'Clue pinned.':'Clue unpinned.');
+  }
   if(action.type==='enter_room'){
     if(s.room===2&&lastUnlocked(s)>=2&&!s.flags.finished&&!s.flags.beaconLit&&!s.journal.includes('knock')){
       note('knock');return {...finish(true,'Three measured taps travel up the pipes. A pause. Then three more. Kept in your field journal.'),discovery:'knock'};

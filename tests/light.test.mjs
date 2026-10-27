@@ -22,6 +22,7 @@ test('alignment requires a correct beam and a visible between-floor view', () =>
   assert.equal(lightAligned(aim,160,{...view,scale:0}),false);
   assert.equal(lightAligned(aim,160,null),false);
   assert.equal(lightAligned(aim,160,{...view,obstruction:{left:1000,right:1200,top:700,bottom:900}}),false,'A receiver behind the controls is not visible');
+  assert.equal(lightAligned(aim,160,{...view,obstructions:[{left:20,right:250,top:640,bottom:950},{left:1000,right:1200,top:700,bottom:900}]}),false,'A pinned note cannot hide an endpoint while locking');
 });
 
 test('installing the prism does not reveal the wall until the cross-floor puzzle is solved', () => {

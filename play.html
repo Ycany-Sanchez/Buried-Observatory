@@ -108,6 +108,37 @@ dialog{z-index:20}
   .depth-rail{right:16px}.depth-track{height:95px}.controls-strip{gap:12px;font-size:8px}.controls-strip .icon{display:none}.controls-strip b{font-size:7px}
   .expedition-details{grid-template-columns:1fr;gap:22px}
 }
+
+/* Field notes share the observatory's ink and brass, with room for drawings. */
+dialog.journal-dialog{width:min(900px,calc(100% - 32px))}
+.journal-spread{display:grid;grid-template-columns:minmax(190px,.85fr) minmax(0,1.5fr);gap:24px;border-top:1px solid var(--line);padding-top:20px}
+.journal-spread>.journal-list{max-height:min(49svh,470px);overflow:auto;scrollbar-color:var(--dim) var(--panel)}
+.journal-spread .journal-entry{border:0;border-bottom:1px solid var(--line);border-left:2px solid transparent;padding:12px 10px;line-height:1.5;gap:9px}
+.journal-entry[aria-current="true"]{border-left-color:var(--gold);background:#1b2d2d;color:#e9d4a9}
+.journal-page{min-width:0;border-left:1px solid var(--line);padding:4px 0 4px 24px}
+.journal-page>.eyebrow{font-size:8px}
+.journal-page h3{font:400 28px/1.15 var(--serif);margin:8px 0 18px;color:var(--ink)}
+.journal-copy{font:400 21px/1.55 var(--serif);color:#d9d4bd;margin:20px 0}
+.clue-sketch{margin:14px 0;color:#c2b48b;border-top:1px dashed #64725b66;border-bottom:1px dashed #64725b66;padding:10px 0}
+.clue-sketch svg{width:100%;height:auto;max-height:190px;display:block}
+.clue-sketch text{fill:currentColor;stroke:none;font:8px var(--mono);letter-spacing:1px}
+.clue-sketch .sketch-number{font:23px var(--mono)}
+.clue-sketch figcaption{font:8px/1.6 var(--mono);letter-spacing:1px;color:#8e9c88;text-align:center;margin:4px 0}
+.pinned-clue{position:absolute;top:210px;left:24px;width:250px;max-height:calc(100svh - 260px);overflow:auto;z-index:4;background:#0d1b20f5;border:1px solid #536052;border-left:2px solid var(--gold);padding:10px 12px;scrollbar-color:var(--dim) var(--panel)}
+.pinned-heading{display:flex;align-items:flex-start;gap:6px}
+.pinned-read{min-width:0;flex:1;background:transparent;border:0;text-align:left;padding:4px 0;color:var(--ink)}
+.pinned-read small{display:block;font:7px/1.6 var(--mono);letter-spacing:1.2px;color:var(--gold)}
+.pinned-read span{display:block;font:20px/1.15 var(--serif);margin-top:5px}
+.pinned-content .clue-sketch{margin:10px 0}
+.pinned-content>p{font-size:12px;line-height:1.65;color:#c4cbbb;max-height:10em;overflow:auto;margin:12px 0 3px}
+@media(max-width:700px){.journal-spread{grid-template-columns:1fr;gap:14px}.journal-spread>.journal-list{max-height:145px}.journal-page{border-left:0;border-top:1px solid var(--line);padding:17px 0 0}.journal-page h3{font-size:25px}.journal-copy{font-size:20px}}
+@media(max-width:800px),(max-height:600px){
+  .pinned-clue{top:190px;left:18px;width:calc(100% - 36px);max-height:none;padding:0 6px 0 12px}
+  .pinned-content{display:none}.pinned-heading{align-items:center}.pinned-heading .close-button{width:40px;height:40px;flex-shrink:0}
+  .pinned-read{padding:5px 0}.pinned-read span{font:12px/1.4 var(--sans);margin:1px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .aiming-light .pinned-clue,.operating-instrument .pinned-clue{top:64px}
+}
+@media(max-height:600px){.pinned-clue{top:64px}}
 </style>
 </head>
 <body>
@@ -151,6 +182,7 @@ dialog{z-index:20}
       </nav>
     </header>
     <main class="game-layout">
+      <aside id="pinnedClue" class="pinned-clue" aria-label="Pinned field note" hidden></aside>
       <section class="play-column" aria-labelledby="roomName">
         <div class="room-heading"><div><p class="eyebrow" id="roomNumber">CHAMBER I / V</p><h1 id="roomName">Broken Dome</h1><p id="hudObjective" class="hud-objective"></p></div><div class="room-depth"><span id="depthValue">00</span><small>METRES BELOW</small></div></div>
         <div id="stage" class="stage">
@@ -207,11 +239,11 @@ function lightInView(scroll, view) {
   if (!view || ![scroll, view.scale, view.x, view.y, view.width, view.height].every(Number.isFinite) || view.scale <= 0) return false;
   // A deliberate between-floor view is part of the mechanism, even on tall displays.
   if (scroll < 64 || scroll > 256) return false;
+  const panels=view.obstructions??(view.obstruction?[view.obstruction]:[]);
+  if(!Array.isArray(panels)||panels.some(panel=>!panel||![panel.left,panel.right,panel.top,panel.bottom].every(Number.isFinite)))return false;
   return [LIGHT_PATH.source, LIGHT_PATH.receiver].every(p => {
     const x = view.x + p.x * view.scale, y = view.y + (p.y - scroll) * view.scale;
-    const panel = view.obstruction;
-    if (panel && ![panel.left,panel.right,panel.top,panel.bottom].every(Number.isFinite)) return false;
-    const covered = panel && x+16>panel.left && x-16<panel.right && y+16>panel.top && y-16<panel.bottom;
+    const covered=panels.some(panel=>x+16>panel.left&&x-16<panel.right&&y+16>panel.top&&y-16<panel.bottom);
     return !covered && x >= 16 && x <= view.width - 16 && y >= 72 && y <= view.height - 36;
   });
 }
@@ -257,7 +289,7 @@ const NOTES = {
   reunion: { title: 'What the observatory was for', room: 'Buried Beacon', text: 'Elian is alive. The buried lens was built to send a signal through the mountain: a way home for anyone lost in the dark. The stars on its walls were instructions, not observations.' }
 };
 function freshState() {
-  return { version: 1, room: 0, player: { x: 240, y: 86 }, flags: { archive: false, key: false, pump: false, drained: false, prism: false, projector: false, beamAligned: false, generator: false, shutters: false, finished: false }, journal: ['letter'], hints: {}, instruments:freshInstruments(), muted: true };
+  return { version: 1, room: 0, player: { x: 240, y: 86 }, flags: { archive: false, key: false, pump: false, drained: false, prism: false, projector: false, beamAligned: false, generator: false, shutters: false, finished: false }, journal: ['letter'], pinnedNote:null, hints: {}, instruments:freshInstruments(), muted: true };
 }
 function lastUnlocked(s) {
   if (s.flags.projector && s.flags.beamAligned && s.flags.generator && s.flags.shutters) return 4;
@@ -285,6 +317,7 @@ function restoreState(raw) {
       s.player = { x: Math.max(46, Math.min(434, data.player.x)), y: Math.max(48, Math.min(278, data.player.y)) };
     }
     s.journal = [...new Set(['letter', ...data.journal.filter(k => Object.hasOwn(NOTES, k))])];
+    s.pinnedNote=typeof data.pinnedNote==='string'&&s.journal.includes(data.pinnedNote)?data.pinnedNote:null;
     s.muted = data.muted !== false;
     s.instruments=restoreInstruments(data.instruments);
     if (data.hints && typeof data.hints === 'object') for (const [k, v] of Object.entries(data.hints)) if (Number.isInteger(v) && v >= 0 && v <= 3) s.hints[k] = v;
@@ -303,6 +336,10 @@ function applyAction(original, action) {
   const s = structuredClone(original);
   const finish = (ok, message) => ({ state: s, ok, message });
   const note = id => { if (!s.journal.includes(id)) s.journal.push(id); };
+  if(action.type==='pin_note'){
+    if(action.id!==null&&(typeof action.id!=='string'||!s.journal.includes(action.id)))return finish(false,'Discover this page before pinning it.');
+    s.pinnedNote=action.id;return finish(true,action.id?'Clue pinned.':'Clue unpinned.');
+  }
   if(action.type==='enter_room'){
     if(s.room===2&&lastUnlocked(s)>=2&&!s.flags.finished&&!s.flags.beaconLit&&!s.journal.includes('knock')){
       note('knock');return {...finish(true,'Three measured taps travel up the pipes. A pause. Then three more. Kept in your field journal.'),discovery:'knock'};
@@ -482,6 +519,28 @@ function routeTo(room,start,destination) {
     for(const next of current.neighbors){const nextCost=cost.get(current)+distance(current,next);if(nextCost<(cost.get(next)??Infinity)){cameFrom.set(next,current);cost.set(next,nextCost);estimate.set(next,nextCost+distance(next,finish));open.add(next);}}
   }
   return [];
+}
+
+const sketchLabels={letter:'An uncharted passage',trail:'Bootprints through the dust',mural:'The celestial procession',reflection:'The view from beneath',mentor:'A passage cut off by water',knock:'Three taps, a pause, three taps',plaque:'Drain, latch, then power',prism:'A prism and its matching socket',light:'One instrument across two floors',projection:'The discovered shutter sequence',diagram:'Three unfinished channels',reunion:'A signal through the mountain'};
+function sketchSymbol(kind,x,y){
+  const shape=kind==='crescent'?'<path d="M5-12a13 13 0 1 0 0 24A13 13 0 0 1 5-12Z"/>':kind==='star'?'<path d="m0-14 4 10 10 4-10 4-4 10-4-10-10-4 10-4Z"/>':'<circle r="7"/><path d="M0-17v5m0 24v5M-17 0h5m24 0h5M-12-12l4 4m16 16 4 4m0-24-4 4m-16 16-4 4"/>';
+  return `<g transform="translate(${x} ${y})">${shape}</g>`;
+}
+function clueSketch(id){
+  let drawing;
+  if(id==='mural')drawing=['crescent','star','sun'].map((kind,i)=>sketchSymbol(kind,55+i*85,52)).join('')+'<path d="M80 52h26m-5-4 5 4-5 4M165 52h26m-5-4 5 4-5 4"/>';
+  else if(id==='reflection')drawing=['crescent','star','sun'].map((kind,i)=>sketchSymbol(kind,55+i*85,40)).join('')+'<path d="M34 76h213M225 91H55m7-5-7 5 7 5"/><text x="140" y="113" text-anchor="middle">READ FROM BENEATH</text>';
+  else if(id==='projection')drawing=[2,4,1,3].map((n,i)=>`<rect x="${31+i*59}" y="24" width="40" height="54"/><text x="${51+i*59}" y="58" class="sketch-number" text-anchor="middle">${n}</text>`).join('')+'<path d="M45 94h190m-6-4 6 4-6 4"/>';
+  else if(id==='prism')drawing='<path d="m65 23-30 59h60Zm0 0v59M121 54h35m-6-5 6 5-6 5M185 26h58v63h-58zM214 37l-20 39h40Z"/>';
+  else if(id==='light')drawing='<path d="M20 55h240M20 61h240M80 18v15m-12 0h24M80 33l113 58m-9-5 9 5-9 3"/><circle cx="200" cy="94" r="12"/><text x="114" y="28">DOME</text><text x="25" y="98">ARCHIVE</text>';
+  else if(id==='plaque')drawing='<path d="M27 27v49h61V27m-53 15h45M58 53v36m-6-6 6 6 6-6M115 57h37m-6-5 6 5-6 5M172 36h25v43h-25zM184 37l18-15"/><circle cx="234" cy="60" r="22"/><path d="M234 38v44m-22-22h44m-38-16 32 32m0-32-32 32"/>';
+  else if(id==='diagram')drawing=sketchSymbol('sun',53,30)+'<circle cx="140" cy="30" r="13"/><path d="M140 17v26m-13-13h26M214 18h28v25h-28zM222 18v25m10-25v25M53 49v17h87m88-17v17h-88m0-17v44"/><path d="m126 105 14-12 14 12" stroke-dasharray="3 4"/>';
+  else if(id==='knock')drawing='<path d="M32 43h216v31H32zM55 43v31m165-31v31"/>'+[78,93,108,169,184,199].map(x=>`<path d="M${x} 27v9m-3-6h6"/>`).join('');
+  else if(id==='trail')drawing=[0,1,2,3,4].map((n)=>`<g transform="translate(${66+n*36} ${n%2?45:67}) rotate(-25)"><rect x="-4" y="-12" width="8" height="15" rx="3"/><path d="M-3 8h6"/></g>`).join('');
+  else if(id==='reunion')drawing='<path d="M22 94 83 29l43 44 43-56 89 77M140 97V35m-7 10 7-10 7 10"/>'+sketchSymbol('star',140,24);
+  else drawing='<path d="M79 22h108v77H79zM94 40h73m-73 14h51m-51 14h70m-70 14h37M66 32v58m132-58v58"/><path d="m151 84 15-21 8 7-15 21-12 3Z"/>';
+  const label=sketchLabels[id]??'Field observation';
+  return `<figure class="clue-sketch"><svg viewBox="0 0 280 122" role="img" aria-label="${label}" xmlns="http://www.w3.org/2000/svg"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${drawing}</g></svg><figcaption>${label}</figcaption></figure>`;
 }
 
 
@@ -706,6 +765,7 @@ let nextNavigationRoom=0;
 function warmNavigation(){if(nextNavigationRoom>=ROOMS.length)return;prepareNavigation(nextNavigationRoom++);if(window.requestIdleCallback)window.requestIdleCallback(warmNavigation);else setTimeout(warmNavigation,40);}
 if(window.requestIdleCallback)window.requestIdleCallback(warmNavigation);else setTimeout(warmNavigation,40);
 let activeInstrument=null,instrumentDrag=null,suppressCanvasClick=false;
+let journalSelection=state.journal.at(-1),renderedPinnedNote;
 let visual={water:state.flags.drained?0:1,power:state.flags.generator?1:0,shutters:[0,0,0,0],crank:0,wheel:0,pulse:null};
 state.player = safePosition(state.room, state.player);
 let hasSave = !!saved && state.version === 1;
@@ -734,6 +794,16 @@ function updateUI() {
   $('soundButton').setAttribute('aria-label', state.muted ? 'Unmute ambient sound' : 'Mute ambient sound');
   $('soundButton').setAttribute('aria-pressed', String(!state.muted));
   $('soundButton').innerHTML = `<svg class="icon"><use href="#i-${state.muted?'mute':'sound'}"/></svg>`;
+  updatePinnedClue();
+}
+function pinNote(id){const result=applyAction(state,{type:'pin_note',id});if(!result.ok)return;state=result.state;updateUI();save();}
+function updatePinnedClue(){
+  const pinned=$('pinnedClue'),id=state.pinnedNote;pinned.hidden=!id;
+  if(id===renderedPinnedNote)return;renderedPinnedNote=id;
+  if(!id){pinned.replaceChildren();return;}
+  const note=NOTES[id];
+  pinned.innerHTML=`<div class="pinned-heading"><button id="readPinned" class="pinned-read"><small>PINNED FIELD NOTE</small><span>${note.title}</span></button><button id="unpinNote" class="close-button" aria-label="Unpin clue">×</button></div><div class="pinned-content">${clueSketch(id)}<p>${note.text}</p></div>`;
+  $('readPinned').onclick=()=>notePanel(id);$('unpinNote').onclick=()=>{pinNote(null);canvas.focus({preventScroll:true});};
 }
 function rebuildScene() { scenes.clear(); }
 function roomScene(room) {
@@ -781,7 +851,9 @@ function scrollDungeon(distance) {
 }
 function lightViewport() {
   const r=$('lightControls').getBoundingClientRect();
-  return {...view,obstruction:{left:r.left,right:r.right,top:r.top,bottom:r.bottom}};
+  const obstructions=[{left:r.left,right:r.right,top:r.top,bottom:r.bottom}];
+  if(!$('pinnedClue').hidden){const p=$('pinnedClue').getBoundingClientRect();obstructions.push({left:p.left,right:p.right,top:p.top,bottom:p.bottom});}
+  return {...view,obstructions};
 }
 function updateLightControls() {
   if (!adjustingLight) return;
@@ -830,6 +902,7 @@ function commit(action) {
   return result;
 }
 function shell(eyebrow, title, body, footer = '') {
+  dialog.classList.remove('journal-dialog');
   heldDirections.clear();pendingInteraction=null;
   target = null; moved = false; pointer = null; $('hoverLabel').hidden = true;
   $('dialogContent').innerHTML = `<div class="dialog-inner"><div class="dialog-top"><p class="eyebrow">${eyebrow}</p><button class="close-button" data-close aria-label="Close dialog">×</button></div><h2 id="dialogTitle">${title}</h2>${body}${footer ? `<div class="dialog-bottom">${footer}</div>` : ''}</div>`;
@@ -837,16 +910,26 @@ function shell(eyebrow, title, body, footer = '') {
   if (!dialog.open) dialog.showModal();
 }
 function notePanel(id, journalBack = false) {
-  const n = NOTES[id];
-  shell(n.room.toUpperCase(), n.title, `<p class="dialog-note">${n.text}</p>`, `<span class="journal-tag">✓ KEPT IN YOUR FIELD JOURNAL</span><button class="secondary" id="noteDone">${journalBack?'Back to journal':'Keep exploring'} <span>↗</span></button>`);
+  if(!state.journal.includes(id))return;
+  journalSelection=id;const n = NOTES[id];
+  shell(n.room.toUpperCase(), n.title, `${clueSketch(id)}<p class="dialog-note">${n.text}</p>`, `<button class="secondary" id="pinNote" aria-pressed="${state.pinnedNote===id}">${state.pinnedNote===id?'Unpin clue':'Pin this clue'}</button><button class="secondary" id="noteDone">${journalBack?'Back to journal':'Keep exploring'} <span>↗</span></button>`);
+  $('pinNote').onclick=()=>{pinNote(state.pinnedNote===id?null:id);$('pinNote').textContent=state.pinnedNote===id?'Unpin clue':'Pin this clue';$('pinNote').setAttribute('aria-pressed',String(state.pinnedNote===id));};
   $('noteDone').onclick = journalBack ? openJournal : () => dialog.close();
 }
 function description(title, text) {
   shell(ROOMS[state.room].name.toUpperCase(), title, `<p class="dialog-copy">${text}</p>`, '<span class="journal-tag">LOOK CLOSER. GO DEEPER.</span><button class="secondary" data-close>Keep exploring <span>↗</span></button>');
 }
 function openJournal() {
-  shell('YOUR FIELD JOURNAL', 'Things worth remembering', `<p class="dialog-copy">Clues travel with you. Sometimes an old discovery makes sense only after a new one.</p><div class="journal-list">${state.journal.map((id,i)=>`<button class="journal-entry" data-note="${id}"><span><small>${String(i+1).padStart(2,'0')}</small>${NOTES[id].title}</span><span>↗</span></button>`).join('')}</div>`, '<span class="journal-tag">J TO OPEN · ESC TO CLOSE</span>');
-  for (const b of dialog.querySelectorAll('[data-note]')) b.onclick = () => notePanel(b.dataset.note, true);
+  shell('YOUR FIELD JOURNAL', 'A record of the descent', `<p class="dialog-copy">Sketches, traces, and things worth carrying with you. Pin a page to keep it close while you explore.</p><div class="journal-spread"><nav class="journal-list" aria-label="Discovered pages">${state.journal.map((id,i)=>`<button class="journal-entry" data-note="${id}" aria-controls="journalPage"><span><small>${String(i+1).padStart(2,'0')}</small>${NOTES[id].title}</span><span aria-hidden="true">↗</span></button>`).join('')}</nav><article id="journalPage" class="journal-page" aria-label="Selected field note"></article></div>`, '<span class="journal-tag">J TO OPEN · ESC TO CLOSE</span>');
+  dialog.classList.add('journal-dialog');
+  for(const b of dialog.querySelectorAll('[data-note]'))b.onclick=()=>selectJournalPage(b.dataset.note);
+  selectJournalPage(state.journal.includes(journalSelection)?journalSelection:state.journal.at(-1));
+}
+function selectJournalPage(id){
+  if(!state.journal.includes(id))return;journalSelection=id;const note=NOTES[id];
+  for(const b of dialog.querySelectorAll('[data-note]'))b.setAttribute('aria-current',String(b.dataset.note===id));
+  $('journalPage').innerHTML=`<p class="eyebrow">${note.room}</p><h3>${note.title}</h3>${clueSketch(id)}<p class="journal-copy">${note.text}</p><button id="pinJournalNote" class="secondary" aria-pressed="${state.pinnedNote===id}">${state.pinnedNote===id?'Unpin clue':'Pin this clue'}</button>`;
+  $('pinJournalNote').onclick=()=>{pinNote(state.pinnedNote===id?null:id);$('pinJournalNote').textContent=state.pinnedNote===id?'Unpin clue':'Pin this clue';$('pinJournalNote').setAttribute('aria-pressed',String(state.pinnedNote===id));};
 }
 function openExpedition() {
   shell('YOUR EXPEDITION', 'A thread through the dark', `<p class="dialog-note">${objective(state)}</p><div class="expedition-details"><section><p class="section-label">THE DESCENT</p><ol class="room-list">${$('roomList').innerHTML}</ol></section><section><p class="section-label">IN YOUR SATCHEL</p><div class="inventory-items">${$('inventoryItems').innerHTML}</div></section></div>`, '<span class="journal-tag">SCROLL DOWN TO DESCEND · UP TO RETURN</span><button class="secondary" data-close>Keep exploring <span>↗</span></button>');
@@ -943,6 +1026,7 @@ function instructions() {
 function start(continueSave=false) {
   leaveLight();leaveInstrument();lightAim=LIGHT_PATH.initialAim;
   if (!continueSave) { state=freshState();hasSave=true; }
+  journalSelection=state.journal.at(-1);
   state.player=safePosition(state.room,state.player);running=true;target=null;pointer=null;roomPositions.clear();cameraY=state.room*H;
   route=[];routeGoal=null;pendingInteraction=null;heldDirections.clear();
   visual={water:state.flags.drained?0:1,power:state.flags.generator?1:0,shutters:[0,0,0,0].map(()=>state.flags.shutters?1:0),crank:0,wheel:0,pulse:null};
@@ -1002,7 +1086,7 @@ canvas.addEventListener('pointerup',endLightDrag);
 canvas.addEventListener('pointercancel',endLightDrag);
 canvas.addEventListener('lostpointercapture',()=>{lightDrag=null;instrumentDrag=null;});
 canvas.addEventListener('click',e=>{if(suppressCanvasClick){suppressCanvasClick=false;return;}if(!running||dialog.open||busy||adjustingLight||activeInstrument)return;const p=point(e);if(p.room!==state.room)return;const o=objectUnder(p);if(o){if(Math.hypot(o.x-state.player.x,o.y-state.player.y)<=42)interact(o);else{target={x:o.x,y:o.y};routeGoal=null;pendingInteraction={room:state.room,object:o};toast('Walking to '+o.label.toLowerCase()+'…',1600);}}});
-document.addEventListener('wheel',e=>{if(!running||dialog.open||e.ctrlKey)return;e.preventDefault();scrollDungeon(wheelDistance(e.deltaY,e.deltaMode,view));},{passive:false});
+document.addEventListener('wheel',e=>{if(!running||dialog.open||e.ctrlKey||e.target.closest('#pinnedClue'))return;e.preventDefault();scrollDungeon(wheelDistance(e.deltaY,e.deltaMode,view));},{passive:false});
 document.addEventListener('keydown',e=>{
   if(!running||dialog.open)return;
   const k=e.key.toLowerCase();

@@ -5,6 +5,7 @@ import { viewport, clampScroll, roomAtScroll, screenToWorld, worldToScreen, whee
 import { LIGHT_PATH, clampLightAim, lightHandle, lightInView, lightAligned } from './light.mjs';
 import { routeTo, clearPath, prepareNavigation } from './navigation.mjs';
 import { instrumentPart } from './instruments.mjs';
+import { clueSketch } from './journal.mjs';
 
 const $ = id => document.getElementById(id);
 const canvas = $('game'), ctx = canvas.getContext('2d');
@@ -27,6 +28,7 @@ let nextNavigationRoom=0;
 function warmNavigation(){if(nextNavigationRoom>=ROOMS.length)return;prepareNavigation(nextNavigationRoom++);if(window.requestIdleCallback)window.requestIdleCallback(warmNavigation);else setTimeout(warmNavigation,40);}
 if(window.requestIdleCallback)window.requestIdleCallback(warmNavigation);else setTimeout(warmNavigation,40);
 let activeInstrument=null,instrumentDrag=null,suppressCanvasClick=false;
+let journalSelection=state.journal.at(-1),renderedPinnedNote;
 let visual={water:state.flags.drained?0:1,power:state.flags.generator?1:0,shutters:[0,0,0,0],crank:0,wheel:0,pulse:null};
 state.player = safePosition(state.room, state.player);
 let hasSave = !!saved && state.version === 1;
@@ -55,6 +57,16 @@ function updateUI() {
   $('soundButton').setAttribute('aria-label', state.muted ? 'Unmute ambient sound' : 'Mute ambient sound');
   $('soundButton').setAttribute('aria-pressed', String(!state.muted));
   $('soundButton').innerHTML = `<svg class="icon"><use href="#i-${state.muted?'mute':'sound'}"/></svg>`;
+  updatePinnedClue();
+}
+function pinNote(id){const result=applyAction(state,{type:'pin_note',id});if(!result.ok)return;state=result.state;updateUI();save();}
+function updatePinnedClue(){
+  const pinned=$('pinnedClue'),id=state.pinnedNote;pinned.hidden=!id;
+  if(id===renderedPinnedNote)return;renderedPinnedNote=id;
+  if(!id){pinned.replaceChildren();return;}
+  const note=NOTES[id];
+  pinned.innerHTML=`<div class="pinned-heading"><button id="readPinned" class="pinned-read"><small>PINNED FIELD NOTE</small><span>${note.title}</span></button><button id="unpinNote" class="close-button" aria-label="Unpin clue">×</button></div><div class="pinned-content">${clueSketch(id)}<p>${note.text}</p></div>`;
+  $('readPinned').onclick=()=>notePanel(id);$('unpinNote').onclick=()=>{pinNote(null);canvas.focus({preventScroll:true});};
 }
 function rebuildScene() { scenes.clear(); }
 function roomScene(room) {
@@ -102,7 +114,9 @@ function scrollDungeon(distance) {
 }
 function lightViewport() {
   const r=$('lightControls').getBoundingClientRect();
-  return {...view,obstruction:{left:r.left,right:r.right,top:r.top,bottom:r.bottom}};
+  const obstructions=[{left:r.left,right:r.right,top:r.top,bottom:r.bottom}];
+  if(!$('pinnedClue').hidden){const p=$('pinnedClue').getBoundingClientRect();obstructions.push({left:p.left,right:p.right,top:p.top,bottom:p.bottom});}
+  return {...view,obstructions};
 }
 function updateLightControls() {
   if (!adjustingLight) return;
@@ -151,6 +165,7 @@ function commit(action) {
   return result;
 }
 function shell(eyebrow, title, body, footer = '') {
+  dialog.classList.remove('journal-dialog');
   heldDirections.clear();pendingInteraction=null;
   target = null; moved = false; pointer = null; $('hoverLabel').hidden = true;
   $('dialogContent').innerHTML = `<div class="dialog-inner"><div class="dialog-top"><p class="eyebrow">${eyebrow}</p><button class="close-button" data-close aria-label="Close dialog">×</button></div><h2 id="dialogTitle">${title}</h2>${body}${footer ? `<div class="dialog-bottom">${footer}</div>` : ''}</div>`;
@@ -158,16 +173,26 @@ function shell(eyebrow, title, body, footer = '') {
   if (!dialog.open) dialog.showModal();
 }
 function notePanel(id, journalBack = false) {
-  const n = NOTES[id];
-  shell(n.room.toUpperCase(), n.title, `<p class="dialog-note">${n.text}</p>`, `<span class="journal-tag">✓ KEPT IN YOUR FIELD JOURNAL</span><button class="secondary" id="noteDone">${journalBack?'Back to journal':'Keep exploring'} <span>↗</span></button>`);
+  if(!state.journal.includes(id))return;
+  journalSelection=id;const n = NOTES[id];
+  shell(n.room.toUpperCase(), n.title, `${clueSketch(id)}<p class="dialog-note">${n.text}</p>`, `<button class="secondary" id="pinNote" aria-pressed="${state.pinnedNote===id}">${state.pinnedNote===id?'Unpin clue':'Pin this clue'}</button><button class="secondary" id="noteDone">${journalBack?'Back to journal':'Keep exploring'} <span>↗</span></button>`);
+  $('pinNote').onclick=()=>{pinNote(state.pinnedNote===id?null:id);$('pinNote').textContent=state.pinnedNote===id?'Unpin clue':'Pin this clue';$('pinNote').setAttribute('aria-pressed',String(state.pinnedNote===id));};
   $('noteDone').onclick = journalBack ? openJournal : () => dialog.close();
 }
 function description(title, text) {
   shell(ROOMS[state.room].name.toUpperCase(), title, `<p class="dialog-copy">${text}</p>`, '<span class="journal-tag">LOOK CLOSER. GO DEEPER.</span><button class="secondary" data-close>Keep exploring <span>↗</span></button>');
 }
 function openJournal() {
-  shell('YOUR FIELD JOURNAL', 'Things worth remembering', `<p class="dialog-copy">Clues travel with you. Sometimes an old discovery makes sense only after a new one.</p><div class="journal-list">${state.journal.map((id,i)=>`<button class="journal-entry" data-note="${id}"><span><small>${String(i+1).padStart(2,'0')}</small>${NOTES[id].title}</span><span>↗</span></button>`).join('')}</div>`, '<span class="journal-tag">J TO OPEN · ESC TO CLOSE</span>');
-  for (const b of dialog.querySelectorAll('[data-note]')) b.onclick = () => notePanel(b.dataset.note, true);
+  shell('YOUR FIELD JOURNAL', 'A record of the descent', `<p class="dialog-copy">Sketches, traces, and things worth carrying with you. Pin a page to keep it close while you explore.</p><div class="journal-spread"><nav class="journal-list" aria-label="Discovered pages">${state.journal.map((id,i)=>`<button class="journal-entry" data-note="${id}" aria-controls="journalPage"><span><small>${String(i+1).padStart(2,'0')}</small>${NOTES[id].title}</span><span aria-hidden="true">↗</span></button>`).join('')}</nav><article id="journalPage" class="journal-page" aria-label="Selected field note"></article></div>`, '<span class="journal-tag">J TO OPEN · ESC TO CLOSE</span>');
+  dialog.classList.add('journal-dialog');
+  for(const b of dialog.querySelectorAll('[data-note]'))b.onclick=()=>selectJournalPage(b.dataset.note);
+  selectJournalPage(state.journal.includes(journalSelection)?journalSelection:state.journal.at(-1));
+}
+function selectJournalPage(id){
+  if(!state.journal.includes(id))return;journalSelection=id;const note=NOTES[id];
+  for(const b of dialog.querySelectorAll('[data-note]'))b.setAttribute('aria-current',String(b.dataset.note===id));
+  $('journalPage').innerHTML=`<p class="eyebrow">${note.room}</p><h3>${note.title}</h3>${clueSketch(id)}<p class="journal-copy">${note.text}</p><button id="pinJournalNote" class="secondary" aria-pressed="${state.pinnedNote===id}">${state.pinnedNote===id?'Unpin clue':'Pin this clue'}</button>`;
+  $('pinJournalNote').onclick=()=>{pinNote(state.pinnedNote===id?null:id);$('pinJournalNote').textContent=state.pinnedNote===id?'Unpin clue':'Pin this clue';$('pinJournalNote').setAttribute('aria-pressed',String(state.pinnedNote===id));};
 }
 function openExpedition() {
   shell('YOUR EXPEDITION', 'A thread through the dark', `<p class="dialog-note">${objective(state)}</p><div class="expedition-details"><section><p class="section-label">THE DESCENT</p><ol class="room-list">${$('roomList').innerHTML}</ol></section><section><p class="section-label">IN YOUR SATCHEL</p><div class="inventory-items">${$('inventoryItems').innerHTML}</div></section></div>`, '<span class="journal-tag">SCROLL DOWN TO DESCEND · UP TO RETURN</span><button class="secondary" data-close>Keep exploring <span>↗</span></button>');
@@ -264,6 +289,7 @@ function instructions() {
 function start(continueSave=false) {
   leaveLight();leaveInstrument();lightAim=LIGHT_PATH.initialAim;
   if (!continueSave) { state=freshState();hasSave=true; }
+  journalSelection=state.journal.at(-1);
   state.player=safePosition(state.room,state.player);running=true;target=null;pointer=null;roomPositions.clear();cameraY=state.room*H;
   route=[];routeGoal=null;pendingInteraction=null;heldDirections.clear();
   visual={water:state.flags.drained?0:1,power:state.flags.generator?1:0,shutters:[0,0,0,0].map(()=>state.flags.shutters?1:0),crank:0,wheel:0,pulse:null};
@@ -323,7 +349,7 @@ canvas.addEventListener('pointerup',endLightDrag);
 canvas.addEventListener('pointercancel',endLightDrag);
 canvas.addEventListener('lostpointercapture',()=>{lightDrag=null;instrumentDrag=null;});
 canvas.addEventListener('click',e=>{if(suppressCanvasClick){suppressCanvasClick=false;return;}if(!running||dialog.open||busy||adjustingLight||activeInstrument)return;const p=point(e);if(p.room!==state.room)return;const o=objectUnder(p);if(o){if(Math.hypot(o.x-state.player.x,o.y-state.player.y)<=42)interact(o);else{target={x:o.x,y:o.y};routeGoal=null;pendingInteraction={room:state.room,object:o};toast('Walking to '+o.label.toLowerCase()+'…',1600);}}});
-document.addEventListener('wheel',e=>{if(!running||dialog.open||e.ctrlKey)return;e.preventDefault();scrollDungeon(wheelDistance(e.deltaY,e.deltaMode,view));},{passive:false});
+document.addEventListener('wheel',e=>{if(!running||dialog.open||e.ctrlKey||e.target.closest('#pinnedClue'))return;e.preventDefault();scrollDungeon(wheelDistance(e.deltaY,e.deltaMode,view));},{passive:false});
 document.addEventListener('keydown',e=>{
   if(!running||dialog.open)return;
   const k=e.key.toLowerCase();
