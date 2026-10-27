@@ -51,6 +51,8 @@ With local Chrome installed, `node tools/browser-qa.mjs --full` checks the compl
 
 `--movement-only` checks routing and click-to-approach. `--instruments-only` checks physical dial dragging, the crank, shutters, draft persistence, water/turbine feedback, and narrow layouts. Add `--portable` for the self-contained edition or `--reduced-motion` for gentler feedback.
 
+`--hidpi-only` checks startup at 480×320 with DPR 2 and resizing back to desktop. All browser screenshots verify that the canvas backing, rendering transform, and camera match its actual displayed dimensions.
+
 ## Art
 
 Room illustrations and explorer art generated with the imagegen skill. Gameplay collision and interaction geometry are maintained in code. Interface feedback follows the animate skill. Playwright installation was unavailable in the build environment, so browser verification used local Chrome through the Chrome DevTools Protocol.

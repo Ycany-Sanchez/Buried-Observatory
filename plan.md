@@ -26,6 +26,18 @@ Validation completed:
 
 Gameplay pass implemented: movement → hands-on mechanisms → visible consequences → room layouts. Story pacing, the remaining journal work, and the ending follow afterward.
 
+Gameplay pass validation:
+
+- `npm test`: all 18 tests pass, including routes to every object, collision-safe paths, instrument drafts, physical hit areas, progression, and save migration.
+- `node tools/browser-qa.mjs --full`: final complete journey through the beacon ending and completed-save reload passes without browser exceptions.
+- `--movement-only`: mouse-follow detours, click-to-approach/investigate, and continuous held-key movement pass.
+- `--instruments-only`: physical dial dragging, initial crank picking, crank operation, journal/reload drafts, visible draining water, turbine power, shutter tabs, and prism pickup pass.
+- `--instruments-only --portable --reduced-motion`: standalone controls and gentler visual states pass on desktop, phone, and short-phone layouts.
+- `--hidpi-only`: startup at 480×320 with DPR 2 and transitions back to desktop pass. Every QA screenshot checks the camera, canvas backing dimensions, and rendering transform against the actual displayed size.
+- Standards/specification review completed. Crank collision/picking, shutter lower-edge hit areas, resize synchronization, and initial high-DPI transform issues were fixed and verified.
+
+Next work: item 5 (story pacing), the remaining item 7 journal work, and item 8 (a playable ending). Start a new descent to replay the revised puzzles; existing saves retain their solved mechanisms.
+
 ## 2. Give each room a distinct shape — complete
 
 Introduce a collapsed Dome, narrow Archive aisles, Pump Room catwalks, and a circular Lens Chamber. Match collision geometry to the artwork and preserve reachable objects.
