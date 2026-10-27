@@ -1,9 +1,13 @@
-import { mkdir, readdir, copyFile, cp, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, copyFile, cp, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const stage=path.join(root,'.delivery','buried-observatory');
 await mkdir(path.join(stage,'dist','assets'),{recursive:true});
+// Older delivery folders may still contain provider metadata from past copies.
+const staleHosting=path.resolve(stage,'.openai');
+if(path.dirname(staleHosting)!==path.resolve(stage))throw Error('Hosting cleanup must stay inside the delivery directory');
+await rm(staleHosting,{recursive:true,force:true});
 for(const file of await readdir(path.join(root,'dist')))if(file.endsWith('.html')||file.endsWith('.mjs')||file.endsWith('.css'))await copyFile(path.join(root,'dist',file),path.join(stage,'dist',file));
 for(const file of await readdir(path.join(root,'dist','assets')))if(file.endsWith('.webp'))await copyFile(path.join(root,'dist','assets',file),path.join(stage,'dist','assets',file));
 for(const file of ['README.md','plan.md','package.json','server.mjs','play.html','.gitignore'])await copyFile(path.join(root,file),path.join(stage,file));
