@@ -14,6 +14,6 @@ export function instrumentPart(type,p){
     if(dial!==-1)return {kind:'dial',index:dial,center:PUMP_DIALS[dial]};
     if(Math.hypot(PUMP_CRANK.x-p.x,PUMP_CRANK.y-p.y)<=14)return {kind:'crank',center:PUMP_CRANK};
   }
-  if(type==='shutters'){const key=SHUTTER_KEYS.find(d=>Math.abs(d.x-p.x)<6.5&&Math.abs(d.y-p.y)<17);if(key)return {kind:'shutter',number:key.number};}
+  if(type==='shutters'){const key=SHUTTER_KEYS.find(d=>Math.abs(d.x-p.x)<6.5&&p.y>=d.y-17&&p.y<=d.y+20);if(key)return {kind:'shutter',number:key.number};}
   return null;
 }

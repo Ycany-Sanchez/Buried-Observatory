@@ -17,6 +17,7 @@ let storageAvailable = true, saved = null;
 try { saved = localStorage.getItem(SAVE_KEY); } catch { storageAvailable = false; }
 let state = restoreState(saved), running = false, target = null, pointer = null, busy = false, images = {}, lastTime = 0, moved = false, saveTime = 0, toastTimer, audio;
 let view = viewport(innerWidth, innerHeight), cameraY = state.room * H, scrollingUntil = 0, boundaryNotice = 0;
+let canvasDpr=0;
 const scenes = new Map(), roomPositions = new Map();
 let adjustingLight = false, lightAim = LIGHT_PATH.initialAim, lightDrag = null;
 let route=[],routeGoal=null,routeRoom=-1,nextRouteAt=0,pendingInteraction=null;
@@ -25,7 +26,7 @@ const heldDirections=new Set();
 let nextNavigationRoom=0;
 function warmNavigation(){if(nextNavigationRoom>=ROOMS.length)return;prepareNavigation(nextNavigationRoom++);if(window.requestIdleCallback)window.requestIdleCallback(warmNavigation);else setTimeout(warmNavigation,40);}
 if(window.requestIdleCallback)window.requestIdleCallback(warmNavigation);else setTimeout(warmNavigation,40);
-let activeInstrument=null,instrumentDrag=null;
+let activeInstrument=null,instrumentDrag=null,suppressCanvasClick=false;
 let visual={water:state.flags.drained?0:1,power:state.flags.generator?1:0,shutters:[0,0,0,0],crank:0,wheel:0,pulse:null};
 state.player = safePosition(state.room, state.player);
 let hasSave = !!saved && state.version === 1;
@@ -63,10 +64,12 @@ function roomScene(room) {
 function resize() {
   const r = canvas.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
   if (!r.width || !r.height) return;
+  if(canvasDpr===dpr&&canvas.width===Math.round(r.width*dpr)&&canvas.height===Math.round(r.height*dpr)&&view.width===r.width&&view.height===r.height)return;
   view = viewport(r.width, r.height);
   canvas.width = Math.round(r.width * dpr); canvas.height = Math.round(r.height * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.imageSmoothingEnabled = false;
-  target = null; pointer = null;
+  canvasDpr=dpr;
+  target = null; pointer = null;instrumentDrag=null;lightDrag=null;
 }
 function activateRoom(room) {
   if (room === state.room || room < 0 || room > lastUnlocked(state)) return;
@@ -295,6 +298,7 @@ canvas.addEventListener('pointermove',e=>{
 });
 canvas.addEventListener('pointerleave',()=>{target=null;pointer=null;$('hoverLabel').hidden=true;});
 canvas.addEventListener('pointerdown',e=>{
+  suppressCanvasClick=!!activeInstrument;
   if(!running||dialog.open||busy)return;
   canvas.focus({preventScroll:true});
   if(activeInstrument){const p=point(e);if(p.room===activeInstrument.room)beginInstrumentDrag(e,p);return;}
@@ -311,7 +315,7 @@ function endLightDrag(e){if(e.type==='pointerup')finishInstrumentDrag();else ins
 canvas.addEventListener('pointerup',endLightDrag);
 canvas.addEventListener('pointercancel',endLightDrag);
 canvas.addEventListener('lostpointercapture',()=>{lightDrag=null;instrumentDrag=null;});
-canvas.addEventListener('click',e=>{if(!running||dialog.open||busy||adjustingLight||activeInstrument)return;const p=point(e);if(p.room!==state.room)return;const o=objectUnder(p);if(o){if(Math.hypot(o.x-state.player.x,o.y-state.player.y)<=42)interact(o);else{target={x:o.x,y:o.y};routeGoal=null;pendingInteraction={room:state.room,object:o};toast('Walking to '+o.label.toLowerCase()+'…',1600);}}});
+canvas.addEventListener('click',e=>{if(suppressCanvasClick){suppressCanvasClick=false;return;}if(!running||dialog.open||busy||adjustingLight||activeInstrument)return;const p=point(e);if(p.room!==state.room)return;const o=objectUnder(p);if(o){if(Math.hypot(o.x-state.player.x,o.y-state.player.y)<=42)interact(o);else{target={x:o.x,y:o.y};routeGoal=null;pendingInteraction={room:state.room,object:o};toast('Walking to '+o.label.toLowerCase()+'…',1600);}}});
 document.addEventListener('wheel',e=>{if(!running||dialog.open||e.ctrlKey)return;e.preventDefault();scrollDungeon(wheelDistance(e.deltaY,e.deltaMode,view));},{passive:false});
 document.addEventListener('keydown',e=>{
   if(!running||dialog.open)return;
@@ -354,6 +358,7 @@ async function toggleFullscreen(){try{if(document.fullscreenElement)await docume
 $('fullscreenButton').onclick=toggleFullscreen;
 document.addEventListener('fullscreenchange',()=>{const on=!!document.fullscreenElement;$('fullscreenButton').setAttribute('aria-pressed',String(on));$('fullscreenButton').setAttribute('aria-label',on?'Exit fullscreen':'Enter fullscreen');resize();});
 window.addEventListener('resize',resize);
+new ResizeObserver(resize).observe(canvas);
 $('soundButton').onclick=()=>{state.muted=!state.muted;setAudio();updateUI();save();};
 window.addEventListener('blur',()=>{target=null;pointer=null;lightDrag=null;instrumentDrag=null;heldDirections.clear();save();});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){target=null;pointer=null;heldDirections.clear();save();audio?.context.suspend();}else if(!state.muted&&running)audio?.context.resume();});

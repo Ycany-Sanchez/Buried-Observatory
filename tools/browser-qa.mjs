@@ -24,8 +24,8 @@ try{
   const send=(method,params={})=>new Promise((resolve,reject)=>{const n=++id;const timeout=setTimeout(()=>{pending.delete(n);reject(Error('Browser command timed out: '+method));},15000);pending.set(n,{resolve:v=>{clearTimeout(timeout);resolve(v);},reject:e=>{clearTimeout(timeout);reject(e);}});ws.send(JSON.stringify({id:n,method,params}));});
   const evaluate=async expression=>{const r=await send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(r.exceptionDetails)throw Error(r.exceptionDetails.exception?.description||'Browser evaluation failed');return r.result.value;};
   const click=async selector=>{await evaluate('document.fonts.ready.then(()=>true)');const p=await evaluate(`(()=>{const el=document.querySelector(${JSON.stringify(selector)});if(!el)throw Error('Missing ${selector}');el.scrollIntoView({block:'nearest'});const r=el.getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2}})()`);await send('Input.dispatchMouseEvent',{type:'mouseMoved',...p});await send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...p});await send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...p});await sleep(120);};
-  const screenshot=async name=>{const r=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(path.join(output,name+'.png'),Buffer.from(r.data,'base64'));console.log('SCREENSHOT '+name);};
-  await send('Runtime.enable');await send('Page.enable');await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
+  const screenshot=async name=>{const geometry=await evaluate('(()=>{if(!window.observatory?.running)return {ok:true};const c=document.querySelector("#game"),r=c.getBoundingClientRect(),v=window.observatory.camera,t=c.getContext("2d").getTransform(),dpr=Math.min(devicePixelRatio||1,2);return{ok:r.width===v.width&&r.height===v.height&&Math.abs(c.width/r.width-c.height/r.height)<.01&&t.a===dpr&&t.d===dpr,view:[v.width,v.height],rect:[r.width,r.height],backing:[c.width,c.height],transform:[t.a,t.d],dpr}})()');assert.equal(geometry.ok,true,'Canvas follows the actual viewport: '+JSON.stringify(geometry));const r=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(path.join(output,name+'.png'),Buffer.from(r.data,'base64'));console.log('SCREENSHOT '+name);};
+  await send('Runtime.enable');await send('Page.enable');await send('Emulation.setDeviceMetricsOverride',process.argv.includes('--hidpi-only')?{width:480,height:320,deviceScaleFactor:2,mobile:false}:{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
   if(reducedMotion)await send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
   await send('Page.navigate',{url:process.argv.includes('--portable')?pathToFileURL(path.join(root,'play.html')).href:'http://127.0.0.1:4173'});await sleep(1400);
   if(!process.argv.includes('--resume-check')){await evaluate("localStorage.clear();location.reload()");await sleep(1000);}
@@ -37,6 +37,9 @@ try{
   assert.equal(await evaluate('window.observatory.running'),true);
   assert.equal(await evaluate('(()=>{const r=document.querySelector("#game").getBoundingClientRect();return r.x===0&&r.y===0&&r.width===innerWidth&&r.height===innerHeight})()'),true,'Dungeon fills the browser viewport');
   console.log('PASS title, begin, instructions, initial rendering');
+  if(process.argv.includes('--hidpi-only')){
+    await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});await sleep(200);await screenshot('17-hidpi-to-desktop');
+  }
   if(!process.argv.includes('--resume-check')&&!lightOnly&&!instrumentsOnly){const before=await evaluate('JSON.stringify(window.observatory.state.player)');await click('#hintButton');for(let i=0;i<3;i++)await click('#nextHint');assert.ok((await evaluate('document.querySelector("#hintText").textContent')).includes('CRESCENT'));await click('[data-close]');assert.equal(await evaluate('JSON.stringify(window.observatory.state.player)'),before);await click('#journalButton');assert.equal(await evaluate('document.querySelectorAll(".journal-entry").length'),1);await click('[data-close]');console.log('PASS progressive hints, journal, overlay blocks movement');}
   if(process.argv.includes('--resume-check')){await click('#journalButton');await screenshot('journal-check');console.log(await evaluate('JSON.stringify({running:window.observatory.running,dialog:document.querySelector("#dialog").open,entries:document.querySelectorAll(".journal-entry").length,notes:window.observatory.state.journal})'));await click('[data-close]');await click('#soundButton');assert.equal(await evaluate('window.observatory.state.muted'),false);await click('#soundButton');}
   if(process.argv.includes('--movement-only')){
@@ -58,7 +61,7 @@ try{
     const worldPoint=async(x,y)=>evaluate(`(()=>{const v=window.observatory.camera,s=window.observatory.state;return{x:v.x+${x}*v.scale,y:v.y+(s.room*320+${y}-v.scrollY)*v.scale}})()`);
     const tap=async(x,y)=>{const p=await worldPoint(x,y);await send('Input.dispatchMouseEvent',{type:'mouseMoved',...p});await send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...p});await send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...p});await sleep(100);};
     const until=async(expression,message)=>{const start=Date.now();while(!await evaluate(expression)){if(Date.now()-start>7000)throw Error(message);await sleep(70);}};
-    await tap(160,142);assert.equal(await evaluate('window.observatory.instrument'),'pump');assert.equal(await evaluate('document.querySelector("#dialog").open'),false);
+    await tap(160,174);await until('window.observatory.instrument==="pump"','Clicking the visible crank did not open its instrument');assert.equal(await evaluate('document.querySelector("#dialog").open'),false);
     // Two clockwise physical turns set the first dial to SUN; tap the second to STAR.
     for(let n=0;n<2;n++){
       const a=await worldPoint(146,140),b=await worldPoint(153,147);
@@ -74,7 +77,7 @@ try{
     assert.equal(await evaluate('document.querySelector("#mechanismControls").getBoundingClientRect().bottom<=innerHeight'),true);
     await screenshot('16-pump-short-phone');
     await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});await sleep(150);
-    await tap(160,174);assert.equal(await evaluate('window.observatory.state.flags.drained'),true,'Physical crank drains the chamber');
+    await tap(160,174);assert.equal(await evaluate('window.observatory.state.flags.drained'),true,'Physical crank drains the chamber');assert.equal(await evaluate('document.querySelector("#dialog").open'),false,'Releasing the crank does not open another dialog');
     if(!reducedMotion)assert.ok((await evaluate('window.observatory.effects.water'))>0,'Water recedes visibly instead of disappearing');
     await sleep(reducedMotion?60:1500);assert.equal(await evaluate('window.observatory.effects.water'),0);
     await screenshot('12-pump-drained');

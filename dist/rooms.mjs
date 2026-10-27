@@ -1,3 +1,4 @@
+import { PUMP_CRANK } from './instruments.mjs';
 export const W = 480, H = 320;
 export const ROOM_FEATURES = [
   [{x:52,y:135,w:70,h:35,kind:'rubble'},{x:397,y:200,w:30,h:44,kind:'rubble'},{x:146,y:48,w:28,h:32,kind:'rubble'}],
@@ -24,6 +25,7 @@ export const ROOMS = [
   ] },
   { name: 'Pump Room', subtitle: 'The mountain remembers water', depth: '28', color: '#6baba7', objects: [
     { id: 'regulator', x: 160, y: 142, w: 47, h: 29, label: 'Water regulator', kind: 'pump', puzzle: 'pump' },
+    { id: 'pumpCrank', ...PUMP_CRANK, w:24, h:24, label:'Drain crank', kind:'crank', puzzle:'pump' },
     { id: 'routing', x: 363, y: 181, w: 25, h: 26, label: 'Water routing lever', kind: 'lever', action: 'route_generator' },
     { id: 'plaque', x: 98, y: 224, w: 33, h: 18, label: 'Sluice maintenance plaque', kind: 'plaque', action: 'inspect_plaque' }
   ] },

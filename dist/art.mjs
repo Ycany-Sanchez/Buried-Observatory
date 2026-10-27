@@ -99,8 +99,10 @@ function drawObject(c,o,s,t,near,visual){
     rect(c,-13,-15,26,30,'#858a79');rect(c,-11,-13,22,26,'#b1b3a020');if(s.flags.beamAligned){for(let i=0;i<4;i++)rect(c,-8+i*5,-3,2,6,'#f2d8a0');glow(c,0,0,24,'#ebce7d40');}else{circle(c,0,0,8,'#c5c7ac');circle(c,0,0,4,'#5d7777');}
   }else if(kind==='pump'){
     rect(c,-24,-14,48,28,'#49605b');rect(c,-22,-12,44,24,'#263f40');for(let i=0;i<3;i++){circle(c,(i-1)*14,-2,6,'#c1ac79');symbol(c,SYMBOLS[s.instruments.pump[i]],(i-1)*14,-2,3,'#d8cf9b');}rect(c,-22,-14,44,2,'#a59c71');rect(c,-19,13,5,5,'#71694b');rect(c,14,13,5,5,'#71694b');
-    line(c,0,12,0,24,'#566f68',4);circle(c,0,32,11,'#b7a071',3);circle(c,0,32,3,'#e1d1a0',2);
-    for(let i=0;i<4;i++){const angle=visual.crank+(1-visual.water)*Math.PI+i*Math.PI/2;line(c,0,32,Math.cos(angle)*9,32+Math.sin(angle)*9,'#c8b37c',2);}
+    line(c,0,12,0,24,'#566f68',4);
+  }else if(kind==='crank'){
+    circle(c,0,0,11,'#b7a071',3);circle(c,0,0,3,'#e1d1a0',2);
+    for(let i=0;i<4;i++){const angle=visual.crank+(1-visual.water)*Math.PI+i*Math.PI/2;line(c,0,0,Math.cos(angle)*9,Math.sin(angle)*9,'#c8b37c',2);}
   }else if(kind==='lever'){
     const power=visual.power;rect(c,-12,-10,24,23,'#525945');rect(c,-10,-8,20,18,'#203b36');line(c,-4,6,-4+power*10,-2-power*4,'#b9aa75',3);circle(c,-4+power*10,-3-power*4,3,'#d1b371',2);rect(c,-4,11,8,2,s.flags.generator?'#9cbd8a':'#886a46');
   }else if(kind==='plaque'){
