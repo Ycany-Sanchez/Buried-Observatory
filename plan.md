@@ -38,6 +38,16 @@ Gameplay pass validation:
 
 Payoff pass: complete story pacing, the illustrated journal, and a playable ascent with Elian. Keep the five rooms, current puzzle solutions, pixel art, and mouse-follow controls. Existing saves retain solved mechanisms.
 
+All eight roadmap items are complete. Final payoff validation:
+
+- `npm test`: all 27 tests pass.
+- `node tools/browser-qa.mjs --full`: the complete descent, mirror return journey, beacon activation, companion ascent, Dome exit, completed-save reload, journal, audio, fullscreen, and responsive layouts pass without browser exceptions.
+- `--journal-only` and `--journal-only --portable`: illustrated pages, pin replacement/removal, compact phone references, native Enter activation outside instrument mode, unfinished puzzle drafts, and saved pins pass.
+- `--rescue-only`: reunion gate, rising signal, collision-safe following, interrupted-ascent reload, latched turbine power, phone exit, completion, and old-save migration pass.
+- `--rescue-only --portable --reduced-motion`: the standalone rescue passes with steady restored light and both postgame choices visible on a short phone.
+- Standards review found an Enter-key conflict on focused pinned-note buttons; it was fixed and browser-verified. Specification review found no gaps. Phone completion keeps the title and actions visible while the story scrolls separately.
+- `play.html` regenerated; changes recorded with Conventional Commits.
+
 ### Payoff implementation and acceptance
 
 - Early notes describe an uncharted passage, rising water, and a dry ledge. Footprints at the satchel, a one-time captioned/audible pipe discovery, and an unfinished Lens diagram build the trail. Elian explains the rescue purpose at reunion.
@@ -85,8 +95,8 @@ Add clue sketches, a pinned-clue view, and persistent unfinished puzzle inputs w
 
 Illustrated pages, a selected-note reading view, and one saved pinned clue are implemented. Desktop keeps a compact sketch/text reference visible; small screens use a reference button that opens the note and returns to the current puzzle. Introductory dials, pump dials, and unfinished shutter sequences persist throughout. Browser checks cover changing/removing pins, phone references, journal visits, and reloads.
 
-## 8. Give the ending a playable payoff — in progress
+## 8. Give the ending a playable payoff — complete
 
 Let the beacon beam rise through the unlocked floors, wake the machinery, and reveal the answering light before Elian's final line.
 
-The complete playable ascent is implemented and its focused browser check passes: reunion before beacon activation, a rising signal, Elian's collision-safe following, restored rooms, latched power, a visible Dome exit, and an explicit completion screen. Interrupted-ascent and legacy-completion saves are checked. Final full-journey verification and review remain.
+The complete playable ascent is implemented and verified: reunion before beacon activation, a rising signal, Elian's collision-safe following, restored rooms, latched power, a visible Dome exit, and an explicit completion screen. Interrupted-ascent and legacy-completion saves are checked. Full-journey, standalone, reduced-motion, phone-layout, and review checks are complete.

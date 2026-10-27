@@ -28,8 +28,12 @@ To regenerate the self-contained edition after editing, run `node tools/build-po
 - Shaft mirror: after installing the prism, investigate the mirror beside the Dome's southern stairs. Scroll partway down to frame the mirror and Archive receiver together. Drag the handle or use Left/Right to aim, then Enter to lock. Up/Down and the view buttons adjust the scroll; Escape leaves adjustment. Touch players can swipe the canvas while adjusting.
 - Pump Room: turn the three physical dials by dragging clockwise or tapping. Turn the round crank below the instrument to drain the basin. Buttons and keys 1–3 provide the same controls; Enter turns the crank. The routing lever directly controls water flowing to the turbine.
 - Lens Chamber: lift the numbered shutter tabs in sequence, then align them. Use the physical tabs, buttons, or keys 1–4. Enter aligns; Escape leaves an instrument. Unfinished dials and shutter sequences survive journal visits and reloads.
+- Field journal: select a discovered page to read its sketch and notes. Pin one clue to keep it visible on desktop; phones and short screens show a compact reference button. Pins and unfinished puzzle inputs survive reloads. Focused buttons retain their native Enter activation.
+- Rescue: speak with Elian, light the beacon, then scroll back up together. Elian follows without an escort timer or failure state. Click the open upper gate in the Broken Dome to complete the journey. The routing lever stays latched while the beacon is lit.
 
 Progress autosaves to versioned browser-local storage. Starting a new journey requires confirmation. Audio starts muted; enable it with the sound button.
+
+Footprints, pipe taps, and an unfinished diagram reveal the story gradually; the pipe discovery includes a visible caption when sound is muted. Older completed saves remain complete, and unfinished saves keep their puzzles, notes, and inventory. Reloading during the rescue restores Elian nearby without replaying the beacon animation.
 
 ## Structure
 
@@ -37,6 +41,8 @@ Progress autosaves to versioned browser-local storage. Starting a new journey re
 - `dist/rooms.mjs`: geometry, collision, stairways, and interactive object definitions.
 - `dist/navigation.mjs`: cached navigation grids, obstacle routing, and safe movement segments.
 - `dist/instruments.mjs`: physical dial/crank/shutter hit areas and validated instrument drafts.
+- `dist/journal.mjs`: scalable field-note illustrations.
+- `dist/companion.mjs`: safe companion placement and following routes.
 - `dist/camera.mjs`: continuous scrolling, viewport fitting, and coordinate conversion.
 - `dist/light.mjs`: cross-floor light geometry, framing, and alignment checks.
 - `dist/art.mjs`: crisp pixel rendering, room decoration, effects, and asset composition.
@@ -46,12 +52,17 @@ Progress autosaves to versioned browser-local storage. Starting a new journey re
 - `tests/light.test.mjs`: cross-floor framing, incorrect aim, progression gating, and old-save migration.
 - `tests/navigation.test.mjs`: obstacle detours, safe segments, and approach routes to every object.
 - `tests/instruments.test.mjs`: physical control geometry and unfinished-save recovery.
+- `tests/story.test.mjs`: local discoveries, one-time pipe taps, and gradual exposition.
+- `tests/journal.test.mjs`: discovered-note pin eligibility, persistence, drafts, and sketches.
+- `tests/ending.test.mjs`: reunion/beacon/escape gates, interrupted ascents, legacy completions, and companion navigation.
 
 With local Chrome installed, `node tools/browser-qa.mjs --full` checks the complete journey. Use `--light-only` for the mirror interaction, or `--light-only --portable` to check it in the self-contained edition. The browser checks use an isolated QA profile.
 
 `--movement-only` checks routing and click-to-approach. `--instruments-only` checks physical dial dragging, the crank, shutters, draft persistence, water/turbine feedback, and narrow layouts. Add `--portable` for the self-contained edition or `--reduced-motion` for gentler feedback.
 
 `--hidpi-only` checks startup at 480×320 with DPR 2 and resizing back to desktop. All browser screenshots verify that the canvas backing, rendering transform, and camera match its actual displayed dimensions.
+
+`--journal-only` checks illustrated pages, replacing/removing pins, native keyboard activation, compact phone references, and draft/save preservation. `--rescue-only` checks reunion, signal activation, companion following, reload during ascent, latched power, phone escape/completion choices, and legacy completed saves. Both support `--portable`; rescue checks also support `--reduced-motion`.
 
 ## Art
 
@@ -66,3 +77,4 @@ Room illustrations and explorer art generated with the imagegen skill. Gameplay 
 5. Read the now-lit Archive wall. Route water to the generator in the Pump Room.
 6. In the Lens Chamber open shutters 2, 4, 1, 3 and align them.
 7. Descend, speak with Elian, and light the beacon.
+8. Return upward with Elian to the Broken Dome. Click its open upper gate to leave together and complete the journey.
