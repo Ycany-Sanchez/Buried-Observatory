@@ -1,4 +1,5 @@
 node_modules/
+.openai/
 .browser-profile*/
 qa/
 .delivery/

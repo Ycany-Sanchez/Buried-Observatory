@@ -7,6 +7,6 @@ await mkdir(path.join(stage,'dist','assets'),{recursive:true});
 for(const file of await readdir(path.join(root,'dist')))if(file.endsWith('.html')||file.endsWith('.mjs')||file.endsWith('.css'))await copyFile(path.join(root,'dist',file),path.join(stage,'dist',file));
 for(const file of await readdir(path.join(root,'dist','assets')))if(file.endsWith('.webp'))await copyFile(path.join(root,'dist','assets',file),path.join(stage,'dist','assets',file));
 for(const file of ['README.md','plan.md','package.json','server.mjs','play.html','.gitignore'])await copyFile(path.join(root,file),path.join(stage,file));
-for(const dir of ['tests','tools','.openai'])await cp(path.join(root,dir),path.join(stage,dir),{recursive:true});
+for(const dir of ['tests','tools'])await cp(path.join(root,dir),path.join(stage,dir),{recursive:true});
 await writeFile(path.join(stage,'START HERE.txt'),'Open play.html in your browser. No server or installation is needed.\r\n\r\nFor the modular source version, run: node server.mjs\r\nThen visit http://127.0.0.1:4173\r\n\r\nTests: node --test tests/state.test.mjs\r\n\r\nYour progress is saved in this browser. Saves stay with the local file or website where you play.\r\n');
 console.log('Delivery directory: '+stage);
